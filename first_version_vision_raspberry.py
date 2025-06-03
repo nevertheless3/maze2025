@@ -56,6 +56,17 @@ patterns = {
     ]
     ,
     'S': [
+
+    [[0, 0, 0, 0, 0, 0, 1, 1, 0],
+    [1, 0, 0, 0, 0, 1, 1, 1, 1],
+    [1, 0, 0, 0, 0, 1, 0, 0, 1],
+    [1, 0, 0, 0, 1, 1, 0, 0, 1],
+    [1, 0, 0, 0, 1, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1, 0, 0, 0, 1],
+    [1, 1, 0, 1, 1, 0, 0, 0, 1],
+    [1, 1, 1, 1, 0, 0, 0, 0, 1],
+    [0, 1, 1, 1, 0, 0, 0, 0, 1]],
+    
     [[0, 0, 1, 1, 1, 1, 1, 1, 1],
     [1, 1, 0, 0, 0, 0, 0, 0, 1],
     [1, 1, 0, 0, 0, 0, 0, 0, 0],
@@ -187,7 +198,6 @@ def cosine_matrix_similarity(mat1, mat2):
     flat1 = mat1.flatten().reshape(1, -1)
     flat2 = mat2.flatten().reshape(1, -1)
     return cosine_similarity(flat1, flat2)[0][0]
-
 
 def ColorCheck(contour):
     x , y , w , h = cv.boundingRect(contour)
@@ -425,7 +435,7 @@ def VictimDetection(frame):
                 highest_similarity = similarity
                 best_match = letter
 
-    if highest_similarity >= 0.87:
+    if highest_similarity >= 0.86:
         print(f"Best match: {best_match} (Similarity: {highest_similarity:.2f})")
     else:
         print("No strong match found", highest_similarity)
@@ -462,15 +472,23 @@ while True:
     if cropped_vic is not None:
         best_match, _ , similarity= VictimDetection(cropped_vic)
 
-        if similarity > 0.87:
-            if best_match and box is not None:
-                cv.drawContours(processed_frame, [box], 0, (255, 0, 0), 2)
+    
+        if best_match and box is not None:
+            cv.drawContours(processed_frame, [box], 0, (255, 0, 0), 2)
 
+            if similarity >= 0.86:
                 cv.putText(processed_frame, best_match, (box[0][0], box[0][1] - 10), 
                         cv.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
                 
                 cv.putText(processed_frame, str(round(similarity, 2)), (box[0][0], box[0][1] - 35), 
                         cv.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+            else:
+                cv.putText(processed_frame, 'rejected' , (box[0][0], box[0][1] - 10), 
+                        cv.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+                
+                cv.putText(processed_frame, str(round(similarity, 2)), (box[0][0], box[0][1] - 35), 
+                        cv.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+
 
     cv.imshow('Processed Frame', processed_frame)
     
