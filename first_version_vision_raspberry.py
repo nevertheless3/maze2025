@@ -66,7 +66,7 @@ patterns = {
     [1, 1, 0, 1, 1, 0, 0, 0, 1],
     [1, 1, 1, 1, 0, 0, 0, 0, 1],
     [0, 1, 1, 1, 0, 0, 0, 0, 1]],
-    
+
     [[0, 0, 1, 1, 1, 1, 1, 1, 1],
     [1, 1, 0, 0, 0, 0, 0, 0, 1],
     [1, 1, 0, 0, 0, 0, 0, 0, 0],
@@ -197,7 +197,7 @@ patterns = {
 def cosine_matrix_similarity(mat1, mat2):
     flat1 = mat1.flatten().reshape(1, -1)
     flat2 = mat2.flatten().reshape(1, -1)
-    return cosine_similarity(flat1, flat2)[0][0]
+    return chi2_kernel(flat1, flat2, gamma=0.9)[0][0]
 
 def ColorCheck(contour):
     x , y , w , h = cv.boundingRect(contour)
@@ -434,8 +434,9 @@ def VictimDetection(frame):
             if similarity > highest_similarity:
                 highest_similarity = similarity
                 best_match = letter
-
-    if highest_similarity >= 0.86:
+    
+    highest_similarity *= 10** 4
+    if highest_similarity >= 1:
         print(f"Best match: {best_match} (Similarity: {highest_similarity:.2f})")
     else:
         print("No strong match found", highest_similarity)
@@ -476,7 +477,7 @@ while True:
         if best_match and box is not None:
             cv.drawContours(processed_frame, [box], 0, (255, 0, 0), 2)
 
-            if similarity >= 0.86:
+            if similarity >= 1:
                 cv.putText(processed_frame, best_match, (box[0][0], box[0][1] - 10), 
                         cv.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
                 
