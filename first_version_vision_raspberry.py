@@ -197,7 +197,7 @@ patterns = {
 def cosine_matrix_similarity(mat1, mat2):
     flat1 = mat1.flatten().reshape(1, -1)
     flat2 = mat2.flatten().reshape(1, -1)
-    return chi2_kernel(flat1, flat2, gamma=0.9)[0][0]
+    return chi2_kernel(flat1, flat2, gamma=0.91)[0][0]
 
 def ColorCheck(contour):
     x , y , w , h = cv.boundingRect(contour)
@@ -436,11 +436,11 @@ def VictimDetection(frame):
                 best_match = letter
     
     highest_similarity *= 10** 4
-    if highest_similarity >= 1:
-        print(f"Best match: {best_match} (Similarity: {highest_similarity:.2f})")
-    else:
-        print("No strong match found", highest_similarity)
-        print(np.array2string(binary_matrix, separator=', '))
+    # if highest_similarity >= 1:
+    #     print(f"Best match: {best_match} (Similarity: {highest_similarity:.2f})")
+    # else:
+    #     print("No strong match found", highest_similarity)
+    #     print(np.array2string(binary_matrix, separator=', '))
 
     return best_match, binary_matrix, highest_similarity
     
