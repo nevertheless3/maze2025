@@ -1,8 +1,11 @@
+import threading
+from queue import Queue
 import cv2 as cv
 import numpy as np
 import time
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.metrics.pairwise import chi2_kernel
+
 
 class ColorDetector:
     def __init__(self):
@@ -403,8 +406,22 @@ class VideoProcessor:
         self.color_detector = ColorDetector()
         self.victim_cropper = VictimCropper()
         self.victim_detector = VictimDetector()
+        self.color_queue = Queue()
+        self.victim_queue = Queue()
+
     
-    def process_frame(self):
+    def ProcessColor(self, frame):
+        processed_frame, cropped_color = self.color_detector.detect(frame.copy())
+        self.color_queue.put((processed_frame , cropped_color))
+
+    def ProcessVictim(self, cropped_vic):
+        if cropped_vic is not None:
+            best_match, _, similarity = self.victim_detector.detect(cropped_vic)
+            self.victim_queue.put((best_match, similarity))
+        else:
+            self.victim_queue.put((None, None))
+
+    def ProcessFrame(self):
         ret, frame = self.cap.read()
         
         if not ret:
@@ -418,6 +435,18 @@ class VideoProcessor:
         
         
         crop_frame, cropped_vic, box= self.victim_cropper.crop(frame.copy())
+        
+        color_thread = threading.Thread(target=self.ProcessColor, args=(frame,))
+        color_thread.start()
+
+        victim_thread = threading.Thread(target=self.ProcessVictim, args=(cropped_vic,))
+        victim_thread.start()
+
+        color_thread.join()
+        victim_thread.join()
+
+        processed_frame, cropped_color = self.color_queue.get()
+        best_match, similarity = self.victim_queue.get()
 
         self.curr_time = time.time()
         fps = 1 / (self.curr_time - self.prev_time)
@@ -425,24 +454,22 @@ class VideoProcessor:
         cv.putText(processed_frame, f"FPS: {int(fps)}", (10, 30), 
                    cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
-        if cropped_vic is not None:
-            best_match, _, similarity = self.victim_detector.detect(cropped_vic)
-        
-            if best_match and box is not None:
-                cv.drawContours(processed_frame, [box], 0, (255, 0, 0), 2)
-                cv.putText(processed_frame, str(round(similarity, 2)), (box[0][0], box[0][1] - 35), 
-                                            cv.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
 
-                if similarity >= 1:
-                    cv.putText(processed_frame, best_match, (box[0][0], box[0][1] - 10), 
-                            cv.FONT_HERSHEY_SIMPLEX, 0.9, (0, 200, 0), 2)
-                    
-                else:
-                    cv.putText(processed_frame, 'rejected', (box[0][0], box[0][1] - 10), 
-                            cv.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+        if best_match and box is not None:
+            cv.drawContours(processed_frame, [box], 0, (255, 0, 0), 2)
+            cv.putText(processed_frame, str(round(similarity, 2)), (box[0][0], box[0][1] - 35), 
+                                        cv.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+
+            if similarity >= 1:
+                cv.putText(processed_frame, best_match, (box[0][0], box[0][1] - 10), 
+                        cv.FONT_HERSHEY_SIMPLEX, 0.9, (0, 200, 0), 2)
+                
+            else:
+                cv.putText(processed_frame, 'rejected', (box[0][0], box[0][1] - 10), 
+                        cv.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
                     
 
-        return processed_frame, filters ,  True
+        return processed_frame ,  True
     
     def release(self):
         self.cap.release()
@@ -452,13 +479,13 @@ def main():
     processor = VideoProcessor()
     
     while True:
-        processed_frame , filters , success = processor.process_frame()
+        processed_frame  , success = processor.ProcessFrame()
         
         if not success:
             break
         
         cv.imshow('Processed Frame', processed_frame)
-        cv.imshow('filters', filters)
+        # cv.imshow('filters', filters)
         
         if cv.waitKey(1) & 0xFF == ord('q'):
             break
