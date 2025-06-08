@@ -1,7 +1,7 @@
 import cv2 as cv
 import numpy as np
 import time
-from sklearn.metrics.pairwise import cosine_similarity
+# from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.metrics.pairwise import chi2_kernel
 
 class WhiteWallDetector:
@@ -50,41 +50,44 @@ class ColorDetector:
         ]
         self.detected_colors = []
     
+    def CheckColors(self , cnt):
+        area = cv.contourArea(cnt)
+        rect = cv.minAreaRect(cnt)
+        box = cv.boxPoints(rect)
+        box = np.int32(box)
+        peri = cv.arcLength(cnt,True)
+        approx = cv.approxPolyDP(cnt, 0.02 * peri, True)
+        w, h = int(rect[1][0]), int(rect[1][1])
+        aspect_ratio = w/h if h >0 else 0
+
+        return ( 1000< area < 9000 and
+                0.3 < aspect_ratio < 3 and
+                 3 < len(approx) < 7 )
+    
     def check_parts(self, blob_image, color):
+        
         height, width = blob_image.shape[:2]
         blob_image_LAB = cv.cvtColor(blob_image, cv.COLOR_BGR2LAB)
 
         block_width = width // 4
         block_height = height // 4
 
-        thresh = None
-        for c in self.color_ranges:
-            if c["name"] == color:
-                thresh = c
-                break
+        thresh = next((c for c in self.color_ranges if c["name"] == color), None)
         
-        count = 0
-        for i in range(4):
-            for j in range(4):
-                x1 = j * block_width
-                x2 = (j + 1) * block_width
-                y1 = i * block_height
-                y2 = (i + 1) * block_height
-                
-                block = blob_image_LAB[y1:y2, x1:x2]
-                    
-                l_mean = np.mean(block[:,:,0])
-                a_mean = np.mean(block[:,:,1])
-                b_mean = np.mean(block[:,:,2])
-
-                if (thresh['lower'][0] <= l_mean <= thresh['upper'][0] and
-                    thresh['lower'][1] <= a_mean <= thresh['upper'][1] and
-                    thresh['lower'][2] <= b_mean <= thresh['upper'][2]):
-                    count += 1
+        blocks = [
+            blob_image_LAB[i * block_height:(i + 1) * block_height, 
+                           j * block_width:(j + 1) * block_width]
+            for i in range(4) for j in range(4)
+        ]
+        means = np.array([np.mean(block, axis=(0, 1)) for block in blocks])
         
-        return count >= 14
+        lower = thresh['lower']
+        upper = thresh['upper']
+        matches = np.all((lower <= means) & (means <= upper), axis=1)
+        
+        return np.sum(matches) >= 14
     
-    def detect(self, frame, wall_mask=None):
+    def detect(self, frame, wall_mask= None):
         cropped = None 
 
         self.detected_colors = []
@@ -105,8 +108,7 @@ class ColorDetector:
             if not contours:
                 continue
             largest_contour = max(contours, key=cv.contourArea)
-            if cv.contourArea(largest_contour) > 100:  
-
+            if self.CheckColors(largest_contour):
                 rect = cv.minAreaRect(largest_contour)
                 box = cv.boxPoints(rect)
                 box = np.int32(box)
@@ -337,7 +339,7 @@ class VictimDetector:
     def cosine_matrix_similarity(mat1, mat2):
         flat1 = mat1.flatten().reshape(1, -1)
         flat2 = mat2.flatten().reshape(1, -1)
-        return chi2_kernel(flat1, flat2, gamma=0.009)[0][0]
+        return chi2_kernel(flat1, flat2, gamma=0.0098)[0][0]
 
     def filters(self , frame):
         gray = cv.cvtColor(frame , cv.COLOR_BGR2GRAY)
@@ -469,9 +471,9 @@ class VideoProcessor:
 
         wall_mask = self.wall_detector.detect(frame)
         
-        color_frame = self.color_detector.detect(frame.copy(), wall_mask)
+        color_frame , cropped_color  =  self.color_detector.detect(frame.copy(), wall_mask)
         
-        victim_frame, cropped_vic, box = self.victim_cropper.crop(frame.copy(), wall_mask)
+        victim_frame, cropped_vic, box = self.victim_cropper.crop(color_frame  , wall_mask)
         
         self.curr_time = time.time()
         fps = 1 / (self.curr_time - self.prev_time) if self.prev_time > 0 else 0
