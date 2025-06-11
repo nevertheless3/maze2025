@@ -343,12 +343,12 @@ class VictimDetector:
 
     def filters(self , frame):
         gray = cv.cvtColor(frame , cv.COLOR_BGR2GRAY)
-        # gray = cv.normalize(gray, None, 0, 255, cv.NORM_MINMAX)
         blur = cv.GaussianBlur(gray , (15 ,15), 1)
+        blur = cv.medianBlur(blur, 15)
         adaptive_mean = cv.adaptiveThreshold(blur, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 53, 20)
         invert = (255 - adaptive_mean)
 
-        return gray
+        return invert
     
     def detect(self, frame):
         if frame is None or frame.size == 0:
@@ -356,7 +356,7 @@ class VictimDetector:
 
         matrix_size = 9
         height, width = frame.shape[:2]
-        scale = matrix_size / max(height, width) if max(height , width) > 0 else 0
+        scale = matrix_size / max(height, width)
         
         if scale == 0:
             return None, None, None
@@ -413,10 +413,10 @@ class VictimCropper:
         cropped = None
         box = None
 
-        gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-        blur = cv.GaussianBlur(gray, (15, 15), 1)
-        adaptive_mean = cv.adaptiveThreshold(blur, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                          cv.THRESH_BINARY, 201, 16)
+        gray = cv.cvtColor(frame , cv.COLOR_BGR2GRAY)
+        blur = cv.GaussianBlur(gray , (15 ,15), 1)
+        blur = cv.medianBlur(blur, 15)
+        adaptive_mean = cv.adaptiveThreshold(blur, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 53, 20)
         invert = (255 - adaptive_mean)
 
         if wall_mask is not None:
@@ -472,6 +472,7 @@ class VideoProcessor:
         wall_mask = self.wall_detector.detect(frame)
         
         color_frame , cropped_color  =  self.color_detector.detect(frame.copy(), wall_mask)
+        filters = self.victim_detector.filters(frame.copy())
         
         victim_frame, cropped_vic, box = self.victim_cropper.crop(color_frame  , wall_mask)
         
@@ -499,7 +500,7 @@ class VideoProcessor:
                               (box[0][0], box[0][1]-10), 
                               cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,255), 2)
         
-        return victim_frame, wall_mask , True
+        return victim_frame, wall_mask , filters , True
     
     def release(self):
         self.cap.release()
@@ -509,12 +510,13 @@ def main():
     try:
         processor = VideoProcessor()
         while True:
-            frame, wall_mask, success = processor.process_frame()
+            frame, wall_mask,filters ,  success = processor.process_frame()
             if not success:
                 break
                 
             cv.imshow('Detection', frame)
             cv.imshow('mask', wall_mask)
+            cv.imshow('filters', filters)
             if cv.waitKey(1) & 0xFF == ord('q'):
                 break
     except Exception as e:
