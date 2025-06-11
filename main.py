@@ -1,8 +1,13 @@
+'''
+😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺
+'''
+
 import cv2 as cv
 import numpy as np
 import time
 # from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.metrics.pairwise import chi2_kernel
+
 
 class WhiteWallDetector:
     def __init__(self):
@@ -526,3 +531,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+'''
+😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺
+'''
