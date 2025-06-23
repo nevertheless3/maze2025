@@ -180,13 +180,13 @@ class VictimDetector:
                 [N ,N ,1.,1.,1.,1.,1.,N ,0.]],
 
                 [[N ,N ,N ,0.,0.,N ,N ,N ,0.],
-                [N ,N ,0.,0.,N ,1.,N ,1.,N ],
-                [1.,0.,0.,0.,N ,N ,0.,N ,1.],
+                [N ,N ,N ,0.,N ,1.,N ,1.,N ],
+                [1.,N ,0.,0.,N ,N ,0.,N ,1.],
                 [1.,0.,0.,0.,1.,N ,0.,0.,1.],
                 [1.,0.,0.,0.,1.,0.,0.,0.,1.],
                 [1.,0.,0.,0.,1.,0.,0.,0.,1.],
                 [N ,N ,0.,N ,N ,0.,0.,N ,1.],
-                [N ,1.,N ,1.,N ,0.,0.,N ,N ],
+                [N ,1.,N ,1.,N ,0.,N ,N ,N ],
                 [0.,N ,1.,N ,0.,0.,N ,N ,N ]]
 
 
@@ -200,11 +200,11 @@ class VictimDetector:
                 [1.,0.,0.,0.,0.,0.,0.,0.,0.],
                 [1.,0.,0.,0.,0.,0.,0.,0.,0.],
                 [1.,N ,0.,0.,0.,0.,0.,0.,0.],
-                [0.,1.,1.,N ,N ,N ,N ,N ,N ],
+                [0.,N ,1.,N ,N ,N ,N ,N ,N ],
                 [0.,N ,N ,1.,1.,1.,1.,1.,1.]],
 
                 [[1.,1.,1.,1.,1.,1.,1.,N ,0.],
-                [N ,N ,N ,N ,N ,N ,1.,N ,N ],
+                [N ,N ,N ,N ,N ,N ,N ,N ,N ],
                 [0.,0.,0.,0.,0.,0.,0.,N ,1.],
                 [0.,0.,0.,0.,0.,0.,0.,0.,1.],
                 [0.,0.,0.,0.,0.,0.,0.,0.,1.],
@@ -230,7 +230,7 @@ class VictimDetector:
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
-                [1.,N ,0.,0.,0.,0.,0.,1.,1.],
+                [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [N ,N ,N ,0.,0.,0.,N ,N ,N ],
                 [0.,N ,1.,1.,1.,1.,1.,N ,0.]]
 
@@ -252,7 +252,7 @@ class VictimDetector:
         flat1 = t_vals.flatten().reshape(1, -1)
         flat2 = i_vals.flatten().reshape(1, -1)
         
-        return chi2_kernel(flat1,flat2, gamma = 0.0098)[0][0]
+        return cosine_similarity(flat1,flat2)[0][0]
 
     def filters(self , frame):
         gray = cv.cvtColor(frame , cv.COLOR_BGR2GRAY)
@@ -288,7 +288,7 @@ class VictimDetector:
                     highest_similarity = similarity
                     best_match = letter
         
-        if 0.95 <highest_similarity < 0.98:
+        if 0.94 <highest_similarity < 0.96:
             print(np.array2string(binary_matrix, separator=', '))
         # highest_similarity *= 10**4
         
@@ -403,7 +403,7 @@ class VideoProcessor:
                           (box[0][0], box[0][1]-35), 
                           cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
                 
-                if similarity >= 0.95:
+                if similarity >= 0.9:
                     cv.putText(victim_frame, best_match, 
                               (box[0][0], box[0][1]-10), 
                               cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,200,0), 2)
