@@ -5,8 +5,6 @@ import cv2 as cv
 import numpy as np
 import time
 from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.metrics.pairwise import chi2_kernel
-from numpy import linalg
 
 class WhiteWallDetector:
     def __init__(self):
@@ -144,7 +142,7 @@ class ColorDetector:
 class VictimDetector:
     def __init__(self):
 
-        N= np.nan
+        N = np.nan
         self.patterns = {
             'H': [
                 [[1.,N ,0.,0.,0.,0.,0.,N ,1.],
@@ -169,25 +167,25 @@ class VictimDetector:
 
             ],
             'S': [
-                [[0.,0.,1.,1.,1.,1.,1.,N ,N ],
+                [[0.,N ,1.,1.,1.,1.,1.,N ,N ],
                 [N ,1.,N ,0.,0.,0.,N ,N ,N ],
                 [N ,N ,0.,0.,0.,0.,0.,N ,N ],
-                [N ,1.,N ,0.,0.,0.,0.,0.,0.],
+                [N ,1.,N ,N ,0.,0.,0.,0.,0.],
                 [0.,N ,N ,1.,1.,1.,N ,N ,0.],
                 [0.,0.,0.,0.,0.,N ,N ,1.,N ],
-                [N ,N ,0.,0.,0.,0.,0.,N ,1.],
+                [N ,N ,0.,0.,0.,0.,0.,N ,N ],
                 [N ,N ,N ,0.,0.,0.,N ,1.,N ],
                 [N ,N ,1.,1.,1.,1.,1.,N ,0.]],
 
-                [[N ,N ,N ,0.,0.,N ,N ,N ,0.],
+               [[N ,N ,N ,0.,0.,N ,N ,N ,0.],
                 [N ,N ,N ,0.,N ,1.,N ,1.,N ],
-                [1.,N ,0.,0.,N ,N ,0.,N ,1.],
-                [1.,0.,0.,0.,1.,N ,0.,0.,1.],
+                [N ,N ,0.,0.,N ,N ,0.,N ,1.],
+                [1.,0.,0.,0.,N ,N ,0.,0.,1.],
                 [1.,0.,0.,0.,1.,0.,0.,0.,1.],
-                [1.,0.,0.,0.,1.,0.,0.,0.,1.],
+                [1.,0.,0.,N ,1.,0.,0.,0.,1.],
                 [N ,N ,0.,N ,N ,0.,0.,N ,1.],
                 [N ,1.,N ,1.,N ,0.,N ,N ,N ],
-                [0.,N ,1.,N ,0.,0.,N ,N ,N ]]
+                [0.,N ,N ,N ,0.,0.,N ,N ,N ]]
 
 
             ],
@@ -230,7 +228,7 @@ class VictimDetector:
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
-                [1.,N ,0.,0.,0.,0.,0.,N ,1.],
+                [N ,N ,0.,0.,0.,0.,0.,N ,1.],
                 [N ,N ,N ,0.,0.,0.,N ,N ,N ],
                 [0.,N ,1.,1.,1.,1.,1.,N ,0.]]
 
@@ -254,13 +252,6 @@ class VictimDetector:
         
         return cosine_similarity(flat1,flat2)[0][0]
 
-    def filters(self , frame):
-        gray = cv.cvtColor(frame , cv.COLOR_BGR2GRAY)
-        blur = cv.GaussianBlur(gray , (31 ,31), 1)
-        adaptive_mean = cv.adaptiveThreshold(blur, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 53, 20)
-        invert = (255 - adaptive_mean)
-
-        return invert
     
     def detect(self, frame):
         if frame is None or frame.size == 0:
@@ -288,7 +279,7 @@ class VictimDetector:
                     highest_similarity = similarity
                     best_match = letter
         
-        if 0.94 <highest_similarity < 0.96:
+        if 0.94 <highest_similarity < 0.98:
             print(np.array2string(binary_matrix, separator=', '))
         # highest_similarity *= 10**4
         
@@ -297,6 +288,14 @@ class VictimDetector:
 class VictimCropper:
     def __init__(self):
         pass
+
+    def filters(self , frame):
+        gray = cv.cvtColor(frame , cv.COLOR_BGR2GRAY)
+        blur = cv.GaussianBlur(gray , (31 ,31), 1)
+        adaptive_mean = cv.adaptiveThreshold(blur, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 53, 20)
+        invert = (255 - adaptive_mean)
+
+        return invert
     
     def check_contours(self, cnt, frame):
         max_area = 9000
@@ -325,11 +324,7 @@ class VictimCropper:
         cropped = None
         box = None
 
-        gray = cv.cvtColor(frame , cv.COLOR_BGR2GRAY)
-        blur = cv.GaussianBlur(gray , (15 ,15), 1)
-        blur = cv.medianBlur(blur, 15)
-        adaptive_mean = cv.adaptiveThreshold(blur, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 53, 20)
-        invert = (255 - adaptive_mean)
+        invert = self.filters(frame)
 
         if wall_mask is not None:
             invert = cv.bitwise_and(invert, invert, mask=wall_mask)
@@ -384,7 +379,7 @@ class VideoProcessor:
         wall_mask = self.wall_detector.detect(frame)
         
         color_frame , cropped_color  =  self.color_detector.detect(frame.copy(), wall_mask)
-        filters = self.victim_detector.filters(frame.copy())
+        filters = self.victim_cropper.filters(frame.copy())
         
         victim_frame, cropped_vic, box = self.victim_cropper.crop(color_frame  , wall_mask)
         
