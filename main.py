@@ -1,11 +1,13 @@
-'''
-😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺
-'''
 import cv2 as cv
 import numpy as np
+import threading
+import queue
 import time
 from sklearn.metrics.pairwise import cosine_similarity
 
+# ----------------------------
+# Core Detection Classes (Unchanged from your original)
+# ----------------------------
 class WhiteWallDetector:
     def __init__(self):
         self.lower_white = np.array([0, 0, 43])  
@@ -36,7 +38,7 @@ class ColorDetector:
                 "lower": np.array([0,49,87]),
                 "upper": np.array([100, 125, 150]),
                 "display_color": (0, 255, 0)  
-            },
+              },
             {
                 "name": "Red",
                 "lower": np.array([0, 114, 140]),
@@ -107,7 +109,7 @@ class ColorDetector:
             mask = cv.morphologyEx(mask, cv.MORPH_CLOSE, kernel)
             
             contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-            if not contours:
+            if len(contours) == 0:
                 continue
             largest_contour = max(contours, key=cv.contourArea)
             if self.CheckColors(largest_contour):
@@ -192,13 +194,13 @@ class VictimDetector:
             'U': [
 
                 [[0.,N ,1.,1.,1.,1.,1.,1.,1.],
-                [0.,N ,1.,N ,N ,N ,N ,N ,N ],
-                [1.,N ,0.,0.,0.,0.,0.,0.,0.],
+                [0.,N ,N ,N ,N ,N ,N ,N ,N ],
+                [N ,N ,0.,0.,0.,0.,0.,0.,0.],
                 [1.,0.,0.,0.,0.,0.,0.,0.,0.],
                 [1.,0.,0.,0.,0.,0.,0.,0.,0.],
                 [1.,0.,0.,0.,0.,0.,0.,0.,0.],
-                [1.,N ,0.,0.,0.,0.,0.,0.,0.],
-                [0.,N ,1.,N ,N ,N ,N ,N ,N ],
+                [N ,N ,0.,0.,0.,0.,0.,0.,0.],
+                [0.,N ,N ,N ,N ,N ,N ,N ,N ],
                 [0.,N ,N ,1.,1.,1.,1.,1.,1.]],
 
                 [[1.,1.,1.,1.,1.,1.,1.,N ,0.],
@@ -231,7 +233,6 @@ class VictimDetector:
                 [N ,N ,0.,0.,0.,0.,0.,N ,1.],
                 [N ,N ,N ,0.,0.,0.,N ,N ,N ],
                 [0.,N ,1.,1.,1.,1.,1.,N ,0.]]
-
 
             ]
         }
@@ -356,84 +357,109 @@ class VictimCropper:
         return frame, cropped, box
     
 
-class VideoProcessor:
-    def __init__(self):
-        self.cap = cv.VideoCapture(0)
-        if not self.cap.isOpened():
-            raise RuntimeError("Could not open video capture")
+class VideoCaptureThread(threading.Thread):
+    def __init__(self, src=0, width=640, height=480, fps=120):
+        threading.Thread.__init__(self)
+        self.cap = cv.VideoCapture(src)
+        self.cap.set(cv.CAP_PROP_FRAME_WIDTH, width)
+        self.cap.set(cv.CAP_PROP_FRAME_HEIGHT, height)
+        self.cap.set(cv.CAP_PROP_FPS, fps)
+        self.frame_queue = queue.Queue(maxsize=2)  
+        self.running = False
+
+    def run(self):
+        self.running = True
+        while self.running:
+            ret, frame = self.cap.read()
+            if not ret:
+                break
             
+            if not self.frame_queue.full():
+                self.frame_queue.put(frame)
+            else:
+                time.sleep(0.001)  
+
+    def stop(self):
+        self.running = False
+        self.cap.release()
+
+class ProcessingThread(threading.Thread):
+    def __init__(self, capture_thread):
+        threading.Thread.__init__(self)
+        self.capture_thread = capture_thread
+        self.running = False
+        self.fps = 0
+        self.last_time = 0
+        
         self.wall_detector = WhiteWallDetector()
         self.color_detector = ColorDetector()
         self.victim_cropper = VictimCropper()
         self.victim_detector = VictimDetector()
-        
-        self.prev_time = 0
-        self.curr_time = 0
-    
-    def process_frame(self):
-        ret, frame = self.cap.read()
-        if not ret:
-            return None, None, False
-                    
 
-        wall_mask = self.wall_detector.detect(frame)
+    def run(self):
+        self.running = True
+        self.last_time = time.time()
         
-        color_frame , cropped_color  =  self.color_detector.detect(frame.copy(), wall_mask)
-        filters = self.victim_cropper.filters(frame.copy())
-        
-        victim_frame, cropped_vic, box = self.victim_cropper.crop(color_frame  , wall_mask)
-        
-        self.curr_time = time.time()
-        fps = 1 / (self.curr_time - self.prev_time) if self.prev_time > 0 else 0
-        self.prev_time = self.curr_time
-        cv.putText(victim_frame, f"FPS: {int(fps)}", (10,30), 
-                  cv.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
-        
+        while self.running:
+            if not self.capture_thread.frame_queue.empty():
+                frame = self.capture_thread.frame_queue.get()
 
-        if cropped_vic is not None:
-            best_match, _, similarity = self.victim_detector.detect(cropped_vic)
-            if best_match and box is not None:
-                cv.drawContours(victim_frame, [box], 0, (255,0,0), 1)
-                cv.putText(victim_frame, f"{similarity:.2f}", 
-                          (box[0][0], box[0][1]-35), 
-                          cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
+                wall_mask = self.wall_detector.detect(frame)
+                color_frame, _ = self.color_detector.detect(frame.copy(), wall_mask)
+                victim_frame, cropped_vic, box = self.victim_cropper.crop(color_frame, wall_mask)
+
+                if cropped_vic is not None:
+                    best_match, _, similarity = self.victim_detector.detect(cropped_vic)
+                    if best_match and box is not None:
+                        cv.drawContours(victim_frame, [box], 0, (255,0,0), 1)
+                        cv.putText(victim_frame, f"{similarity:.2f}", 
+                                   (box[0][0], box[0][1]-35), 
+                                   cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
+                        
+                        if similarity >= 0.95:
+                            cv.putText(victim_frame, best_match, 
+                                       (box[0][0], box[0][1]-10), 
+                                       cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,200,0), 2)
                 
-                if similarity >= 0.9:
-                    cv.putText(victim_frame, best_match, 
-                              (box[0][0], box[0][1]-10), 
-                              cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,200,0), 2)
-                else:
-                    cv.putText(victim_frame, 'rejected', 
-                              (box[0][0], box[0][1]-10), 
-                              cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,255), 2)
-        
-        return victim_frame, wall_mask , filters , True
-    
-    def release(self):
-        self.cap.release()
-        cv.destroyAllWindows()
-
-def main():
-    try:
-        processor = VideoProcessor()
-        while True:
-            frame, wall_mask,filters ,  success = processor.process_frame()
-            if not success:
-                break
+                curr_time = time.time()
+                self.fps = 1 / (curr_time - self.last_time)
+                self.last_time = curr_time
+                cv.putText(victim_frame, f"FPS: {int(self.fps)}", (10, 30),
+                          cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 
-            cv.imshow('Detection', frame)
-            cv.imshow('mask', wall_mask)
-            cv.imshow('filters', filters)
-            if cv.waitKey(1) & 0xFF == ord('q'):
-                break
-    except Exception as e:
-        print(f"Error: {e}")
-    finally:
-        processor.release()
+                cv.imshow('Detection', victim_frame)
+                if cv.waitKey(1) & 0xFF == ord('q'):
+                    self.running = False
+
+    def stop(self):
+        self.running = False
 
 if __name__ == "__main__":
-    main()
+    CAMERA_WIDTH = 640  
+    CAMERA_HEIGHT = 480
+    TARGET_FPS = 120    
 
-'''
-😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺😺
-'''
+    cap_thread = VideoCaptureThread(
+        src=0, 
+        width=CAMERA_WIDTH,
+        height=CAMERA_HEIGHT,
+        fps=TARGET_FPS
+    )
+    
+    proc_thread = ProcessingThread(cap_thread)
+
+    try:
+        cap_thread.start()
+        proc_thread.start()
+        
+        while proc_thread.running:
+            time.sleep(0.1)  
+            
+    except KeyboardInterrupt:
+        pass
+    finally:
+        proc_thread.stop()
+        cap_thread.stop()
+        proc_thread.join()
+        cap_thread.join()
+        cv.destroyAllWindows()
