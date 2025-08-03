@@ -4,6 +4,7 @@ import threading
 import queue
 import time
 from sklearn.metrics.pairwise import cosine_similarity
+from picamera2 import Picamera2 
 
 # ----------------------------
 # Core Detection Classes (Unchanged from your original)
@@ -360,20 +361,22 @@ class VictimCropper:
 class VideoCaptureThread(threading.Thread):
     def __init__(self, src=0, width=640, height=480, fps=120):
         threading.Thread.__init__(self)
-        self.cap = cv.VideoCapture(src)
-        self.cap.set(cv.CAP_PROP_FRAME_WIDTH, width)
-        self.cap.set(cv.CAP_PROP_FRAME_HEIGHT, height)
-        self.cap.set(cv.CAP_PROP_FPS, fps)
+        self.picam = Picamera2(0)
+        self.picam_config = self.picam.create_preview_configuration(
+            main={"size": (width, height), "format": "RGB888"}
+        )
+        self.picam_config["controls"]["FrameRate"] = fps  # Set FPS
+        self.picam.configure(self.picam_config)
+        self.picam.set_controls({"ExposureTime": 20000})
+
+        self.picam.start()
         self.frame_queue = queue.Queue(maxsize=2)  
         self.running = False
 
     def run(self):
         self.running = True
         while self.running:
-            ret, frame = self.cap.read()
-            if not ret:
-                break
-            
+            frame = self.picam.capture_array()  
             if not self.frame_queue.full():
                 self.frame_queue.put(frame)
             else:
@@ -381,7 +384,7 @@ class VideoCaptureThread(threading.Thread):
 
     def stop(self):
         self.running = False
-        self.cap.release()
+        self.picam.stop()
 
 class ProcessingThread(threading.Thread):
     def __init__(self, capture_thread):
@@ -420,6 +423,11 @@ class ProcessingThread(threading.Thread):
                             cv.putText(victim_frame, best_match, 
                                        (box[0][0], box[0][1]-10), 
                                        cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,200,0), 2)
+                        
+                        else:
+                            cv.putText(victim_frame, 'rejected', 
+                                   (box[0][0], box[0][1]-35), 
+                                   cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,255), 2)
                 
                 curr_time = time.time()
                 self.fps = 1 / (curr_time - self.last_time)
