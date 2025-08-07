@@ -6,9 +6,6 @@ import time
 from sklearn.metrics.pairwise import cosine_similarity
 from picamera2 import Picamera2 
 
-# ----------------------------
-# Core Detection Classes (Unchanged from your original)
-# ----------------------------
 class WhiteWallDetector:
     def __init__(self):
         self.lower_white = np.array([0, 0, 43])  
