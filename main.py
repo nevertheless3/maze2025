@@ -3,7 +3,6 @@ import numpy as np
 import threading
 import queue
 import time
-from sklearn.metrics.pairwise import cosine_similarity
 from picamera2 import Picamera2 
 
 class WhiteWallDetector:
@@ -33,20 +32,20 @@ class ColorDetector:
         self.color_ranges = [
             {
                 "name": "Green",
-                "lower": np.array([0,49,87]),
-                "upper": np.array([100, 125, 150]),
+                "lower": np.array([58,114,56]),
+                "upper": np.array([150, 255, 200]),
                 "display_color": (0, 255, 0)  
               },
             {
                 "name": "Red",
-                "lower": np.array([0, 114, 140]),
-                "upper": np.array([179, 255, 255]),
+                "lower": np.array([0, 141, 106]),
+                "upper": np.array([179, 255, 177]),
                 "display_color": (0, 0, 255) 
             },
             {
                 "name": "Yellow",
-                "lower": np.array([20, 100, 100]),
-                "upper": np.array([30, 255, 255]),
+                "lower": np.array([0, 155, 120]),
+                "upper": np.array([40, 255, 255]),
                 "display_color": (0, 255, 255)  
             }
         ]
@@ -69,7 +68,7 @@ class ColorDetector:
     def check_parts(self, blob_image, color):
         
         height, width = blob_image.shape[:2]
-        blob_image_LAB = cv.cvtColor(blob_image, cv.COLOR_BGR2LAB)
+        blob_image_hsv = cv.cvtColor(blob_image, cv.COLOR_BGR2HSV)
 
         block_width = width // 4
         block_height = height // 4
@@ -77,7 +76,7 @@ class ColorDetector:
         thresh = next((c for c in self.color_ranges if c["name"] == color), None)
         
         blocks = [
-            blob_image_LAB[i * block_height:(i + 1) * block_height, 
+            blob_image_hsv[i * block_height:(i + 1) * block_height, 
                            j * block_width:(j + 1) * block_width]
             for i in range(4) for j in range(4)
         ]
@@ -93,13 +92,13 @@ class ColorDetector:
         cropped = None 
 
         self.detected_colors = []
-        lab = cv.cvtColor(frame, cv.COLOR_BGR2LAB)
+        hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
         
         if wall_mask is not None:
-            lab = cv.bitwise_and(lab, lab, mask=wall_mask)
+            hsv = cv.bitwise_and(hsv, hsv, mask=wall_mask)
             
         for color in self.color_ranges:
-            mask = cv.inRange(lab, color["lower"], color["upper"])
+            mask = cv.inRange(hsv, color["lower"], color["upper"])
             
 
             kernel = np.ones((5,5), np.uint8)
@@ -145,7 +144,7 @@ class VictimDetector:
         N = np.nan
         self.patterns = {
             'H': [
-                [[1.,N ,0.,0.,0.,0.,0.,N ,1.],
+                [[N ,N ,0.,0.,0.,0.,0.,N ,N ],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
@@ -153,9 +152,9 @@ class VictimDetector:
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
-                [1.,N ,0.,0.,0.,0.,0.,N ,1.]],
+                [N ,N ,0.,0.,0.,0.,0.,N ,N ]],
 
-                [[N,1.,1.,1.,1.,1.,1.,1.,1.],
+                [[N,1.,1.,1.,1.,1.,1.,1.,N ],
                 [N ,N ,N ,N ,1.,N ,N ,N ,N ],
                 [0.,0.,0.,0.,1.,0.,0.,0.,0.],
                 [0.,0.,0.,0.,1.,0.,0.,0.,0.],
@@ -163,7 +162,7 @@ class VictimDetector:
                 [0.,0.,0.,0.,1.,0.,0.,0.,0.],
                 [0.,0.,0.,0.,1.,0.,0.,0.,0.],
                 [N ,N ,N ,N ,1.,N ,N ,N ,N ],
-                [N ,1.,1.,1.,1.,1.,1.,1.,1.]]
+                [N ,1.,1.,1.,1.,1.,1.,1.,N ]]
 
             ],
             'S': [
@@ -191,25 +190,25 @@ class VictimDetector:
             ],
             'U': [
 
-                [[0.,N ,1.,1.,1.,1.,1.,1.,1.],
-                [0.,N ,N ,N ,N ,N ,N ,N ,N ],
+                [[0.,N ,1.,1.,1.,1.,1.,1.,N ],
+                [N ,N ,N ,N ,N ,N ,N ,N ,N ],
                 [N ,N ,0.,0.,0.,0.,0.,0.,0.],
                 [1.,0.,0.,0.,0.,0.,0.,0.,0.],
                 [1.,0.,0.,0.,0.,0.,0.,0.,0.],
                 [1.,0.,0.,0.,0.,0.,0.,0.,0.],
                 [N ,N ,0.,0.,0.,0.,0.,0.,0.],
-                [0.,N ,N ,N ,N ,N ,N ,N ,N ],
-                [0.,N ,N ,1.,1.,1.,1.,1.,1.]],
+                [N ,N ,N ,N ,N ,N ,N ,N ,N ],
+                [0.,N ,N ,1.,1.,1.,1.,1.,N ]],
 
-                [[1.,1.,1.,1.,1.,1.,1.,N ,0.],
+                [[N,1.,1.,1.,1.,1.,1.,N ,0.],
                 [N ,N ,N ,N ,N ,N ,N ,N ,N ],
-                [0.,0.,0.,0.,0.,0.,0.,N ,1.],
+                [0.,0.,0.,0.,0.,0.,0.,N ,N ],
                 [0.,0.,0.,0.,0.,0.,0.,0.,1.],
                 [0.,0.,0.,0.,0.,0.,0.,0.,1.],
                 [0.,0.,0.,0.,0.,0.,0.,0.,1.],
-                [0.,0.,0.,0.,0.,0.,0.,0.,1.],
+                [0.,0.,0.,0.,0.,0.,0.,0.,N ],
                 [N ,N ,N ,N ,N ,N ,N ,N ,N ],
-                [1.,1.,1.,1.,1.,1.,1.,N ,0.]],
+                [N ,1.,1.,1.,1.,1.,1.,N ,0.]],
 
                 [[0.,0.,1.,1.,1.,1.,1.,N ,0.],
                 [N ,1.,N ,0.,0.,0.,N ,1.,N ],
@@ -219,26 +218,28 @@ class VictimDetector:
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
-                [N ,N ,0.,0.,0.,0.,0.,N ,1.]],
+                [N ,N ,0.,0.,0.,0.,0.,N ,N ]],
 
 
-                [[1.,N ,0.,0.,0.,0.,0.,N ,1.],
+                [[N,N ,0.,0.,0.,0.,0.,N ,N ],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [N ,N ,0.,0.,0.,0.,0.,N ,1.],
-                [N ,N ,N ,0.,0.,0.,N ,N ,N ],
-                [0.,N ,1.,1.,1.,1.,1.,N ,0.]]
+                [N ,N ,N ,N ,0.,0.,N ,N ,N ],
+                [0.,N ,N ,1.,1.,1.,1.,N ,0.]]
 
             ]
         }
-    
-    @staticmethod
-    def cosine_matrix_similarity(template, input_matrix):
-        template = np.array(template, np.float16)
 
+    @staticmethod
+    def cosine_sim(a, b):
+        return np.dot(a, b.T) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+    def cosine_matrix_similarity(self, template, input_matrix):
+        template = np.array(template, np.float16)
         valid_mask = ~np.isnan(template)
         t_vals = template[valid_mask]
         i_vals = input_matrix[valid_mask]
@@ -246,11 +247,10 @@ class VictimDetector:
         t_vals = np.int8(t_vals)
         i_vals = np.int8(i_vals)
         
-        flat1 = t_vals.flatten().reshape(1, -1)
-        flat2 = i_vals.flatten().reshape(1, -1)
+        flat1 = t_vals.flatten().reshape(1, -1) 
+        flat2 = i_vals.flatten().reshape(1, -1) 
         
-        return cosine_similarity(flat1,flat2)[0][0]
-
+        return self.cosine_sim(flat1, flat2)[0][0]
     
     def detect(self, frame):
         if frame is None or frame.size == 0:
@@ -278,7 +278,7 @@ class VictimDetector:
                     highest_similarity = similarity
                     best_match = letter
         
-        if 0.94 <highest_similarity < 0.98:
+        if highest_similarity >= 0.9:
             print(np.array2string(binary_matrix, separator=', '))
         # highest_similarity *= 10**4
         
@@ -319,9 +319,27 @@ class VictimCropper:
             h + y <= height 
         )
     
-    def crop(self, frame, wall_mask = None):
+    @staticmethod
+    def first_pixel_top_left(binary, value=255):
+        ys, xs = np.where(binary == value)
+        if ys.size == 0:
+            return None
+        order = np.lexsort((xs, ys))
+        return (int(xs[order[0]]), int(ys[order[0]]))
+
+    @staticmethod
+    def first_pixel_top_right(binary, value=0):
+        ys, xs = np.where(binary == value)
+        if ys.size == 0:
+            return None
+        order = np.lexsort((-xs, ys))
+        return (int(xs[order[0]]), int(ys[order[0]]))
+
+    def crop(self, frame, wall_mask=None):
         cropped = None
         box = None
+        first_white = None
+        first_black = None
 
         invert = self.filters(frame)
 
@@ -331,7 +349,7 @@ class VictimCropper:
         contours, _ = cv.findContours(invert.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
         
         if contours:
-            contours = sorted(contours , key= cv.contourArea , reverse= True)[:3]
+            contours = sorted(contours, key=cv.contourArea, reverse=True)[:3]
             
             for contour in contours:
                 if self.check_contours(contour, frame):
@@ -350,15 +368,28 @@ class VictimCropper:
                     M = cv.getPerspectiveTransform(src_pts, dst_pts)
                     cropped = cv.warpPerspective(invert, M, (width, height))
 
+                    _, binary_cropped = cv.threshold(cropped, 127, 255, cv.THRESH_BINARY)
+
+                    first_white = self.first_pixel_top_left(binary_cropped, 255)
+                    first_black = self.first_pixel_top_right(binary_cropped, 0)
+
+                    debug_crop = cv.cvtColor(binary_cropped, cv.COLOR_GRAY2BGR)
+                    if first_white:
+                        cv.circle(debug_crop, first_white, 4, (0, 255, 0), -1)
+                    if first_black:
+                        cv.circle(debug_crop, first_black, 4, (0, 0, 255), -1)
+                    cv.imshow("VictimCrop Debug", debug_crop)
+
                     cv.drawContours(frame, [box], 0, (255, 255, 0), 2)
 
-        return frame, cropped, box
-    
+                    break  
+        return frame, cropped, box, first_white, first_black
+
 
 class VideoCaptureThread(threading.Thread):
-    def __init__(self, src=0, width=640, height=480, fps=120):
+    def __init__(self, src=0, width=160, height=120, fps=120):
         threading.Thread.__init__(self)
-        self.picam = Picamera2(0)
+        self.picam = Picamera2(1)
         self.picam_config = self.picam.create_preview_configuration(
             main={"size": (width, height), "format": "RGB888"}
         )
@@ -389,6 +420,7 @@ class ProcessingThread(threading.Thread):
         self.capture_thread = capture_thread
         self.running = False
         self.fps = 0
+        self.font = cv.FONT_HERSHEY_SIMPLEX
         self.last_time = 0
         
         self.wall_detector = WhiteWallDetector()
@@ -406,7 +438,8 @@ class ProcessingThread(threading.Thread):
 
                 wall_mask = self.wall_detector.detect(frame)
                 color_frame, _ = self.color_detector.detect(frame.copy(), wall_mask)
-                victim_frame, cropped_vic, box = self.victim_cropper.crop(color_frame, wall_mask)
+                victim_frame, cropped_vic, box, first_white, first_black = self.victim_cropper.crop(color_frame, wall_mask)
+
 
                 if cropped_vic is not None:
                     best_match, _, similarity = self.victim_detector.detect(cropped_vic)
@@ -414,35 +447,37 @@ class ProcessingThread(threading.Thread):
                         cv.drawContours(victim_frame, [box], 0, (255,0,0), 1)
                         cv.putText(victim_frame, f"{similarity:.2f}", 
                                    (box[0][0], box[0][1]-35), 
-                                   cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
+                                   self.font, 0.9, (0,255,0), 2)
                         
-                        if similarity >= 0.95:
+                        if similarity >= 0.9:
                             cv.putText(victim_frame, best_match, 
                                        (box[0][0], box[0][1]-10), 
-                                       cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,200,0), 2)
-                        
-                        else:
-                            cv.putText(victim_frame, 'rejected', 
-                                   (box[0][0], box[0][1]-35), 
-                                   cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,255), 2)
+                                       self.font, 0.9, (0,200,0), 2)
                 
                 curr_time = time.time()
-                self.fps = 1 / (curr_time - self.last_time)
+                self.fps = 1 / ((curr_time - self.last_time) + 10**-6)
                 self.last_time = curr_time
                 cv.putText(victim_frame, f"FPS: {int(self.fps)}", (10, 30),
-                          cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                          self.font, 0.7, (0, 255, 0), 2)
                 
                 cv.imshow('Detection', victim_frame)
+
+                #if cropped_vic is not None:
+                    #   cv.imshow('color', cropped_vic)
+                #else:
+                    #                    if cv.getWindowProperty('color', cv.WND_PROP_VISIBLE) >= 1:
+                        #                        cv.destroyWindow('color')
+
                 if cv.waitKey(1) & 0xFF == ord('q'):
-                    self.running = False
+                   self.running = False
 
     def stop(self):
         self.running = False
 
 if __name__ == "__main__":
-    CAMERA_WIDTH = 640  
-    CAMERA_HEIGHT = 480
-    TARGET_FPS = 120    
+    CAMERA_WIDTH = 320  
+    CAMERA_HEIGHT = 240
+    TARGET_FPS = 120
 
     cap_thread = VideoCaptureThread(
         src=0, 
