@@ -1,0 +1,26 @@
+{
+    "green": {
+        "L Min": 0,
+        "A Min": 43,
+        "B Min": 132,
+        "L Max": 255,
+        "A Max": 120,
+        "B Max": 191
+    },
+    "yellow": {
+        "L Min": 0,
+        "A Min": 0,
+        "B Min": 0,
+        "L Max": 255,
+        "A Max": 255,
+        "B Max": 255
+    },
+    "red": {
+        "L Min": 0,
+        "A Min": 153,
+        "B Min": 139,
+        "L Max": 255,
+        "A Max": 255,
+        "B Max": 198
+    }
+}

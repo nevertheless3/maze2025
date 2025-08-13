@@ -3,61 +3,11 @@ import numpy as np
 import threading
 import queue
 import time
-import json 
-import os
 from sklearn.metrics.pairwise import cosine_similarity
 
-COLOR_THRESHOLDS_FILE = r'C:\Users\Win11\Desktop\maze\maze-2026\maze2025\thresholds.json'
-
-DEFAULT_COLOR_THRESHOLDS = {
-    "green": {
-        "lower": [
-            0,
-            17,
-            128
-        ],
-        "upper": [
-            206,
-            118,
-            168
-        ]
-    },
-    "yellow": {
-        "lower": [
-            0,
-            118,
-            173
-        ],
-        "upper": [
-            255,
-            144,
-            255
-        ]
-    },
-    "red": {
-        "lower": [
-            0,
-            153,
-            139
-        ],
-        "upper": [
-            255,
-            255,
-            199
-        ]
-    }
-}
-
-def load_color_thresholds():
-    if os.path.exists(COLOR_THRESHOLDS_FILE):
-        with open(COLOR_THRESHOLDS_FILE, 'r') as f:
-            try:
-                return json.load(f)
-            except json.JSONDecodeError:
-                return DEFAULT_COLOR_THRESHOLDS
-    return DEFAULT_COLOR_THRESHOLDS
-
-
+# ----------------------------
+# Core Detection Classes (Unchanged from your original)
+# ----------------------------
 class WhiteWallDetector:
     def __init__(self):
         self.lower_white = np.array([0, 0, 43])  
@@ -82,31 +32,29 @@ class WhiteWallDetector:
 
 class ColorDetector:
     def __init__(self):
-        self.color_thresholds = load_color_thresholds()
-        self.detected_colors = []
         self.color_ranges = [
             {
                 "name": "Green",
-                "lower": np.array(self.color_thresholds['green']['lower']),
-                "upper": np.array(self.color_thresholds['green']['upper']),
+                "lower": np.array([0,49,87]),
+                "upper": np.array([100, 125, 150]),
                 "display_color": (0, 255, 0)  
-            },
+              },
             {
                 "name": "Red",
-                "lower": np.array(self.color_thresholds['red']['lower']),
-                "upper": np.array(self.color_thresholds['red']['upper']),
+                "lower": np.array([0, 114, 140]),
+                "upper": np.array([179, 255, 255]),
                 "display_color": (0, 0, 255) 
             },
             {
                 "name": "Yellow",
-                "lower": np.array(self.color_thresholds['yellow']['lower']),
-                "upper": np.array(self.color_thresholds['yellow']['upper']),
+                "lower": np.array([20, 100, 100]),
+                "upper": np.array([30, 255, 255]),
                 "display_color": (0, 255, 255)  
             }
         ]
-    def CheckColors(self , frame , cnt):
-        H , W = frame.shape[:2]
-        AREA = W * H
+        self.detected_colors = []
+    
+    def CheckColors(self , cnt):
         area = cv.contourArea(cnt)
         rect = cv.minAreaRect(cnt)
         box = cv.boxPoints(rect)
@@ -116,13 +64,9 @@ class ColorDetector:
         w, h = int(rect[1][0]), int(rect[1][1])
         aspect_ratio = w/h if h >0 else 0
 
-        print('hhhheeeey' , area, AREA / 66)
-        return (
+        return ( 1000< area < 9000 and
                 0.3 < aspect_ratio < 3 and
-                3 < len(approx) < 7 and 
-                AREA / 66 <= area <= AREA / 6
-                )
-
+                 3 < len(approx) < 7 )
     
     def check_parts(self, blob_image, color):
         
@@ -168,7 +112,7 @@ class ColorDetector:
             if len(contours) == 0:
                 continue
             largest_contour = max(contours, key=cv.contourArea)
-            if self.CheckColors(frame , largest_contour):
+            if self.CheckColors(largest_contour):
                 rect = cv.minAreaRect(largest_contour)
                 box = cv.boxPoints(rect)
                 box = np.int32(box)
@@ -193,8 +137,6 @@ class ColorDetector:
                     cv.drawContours(frame, [box], 0, color["display_color"], 2)
                     center = (int(rect[0][0]), int(rect[0][1]))
                     cv.circle(frame, center, 5, color["display_color"], -1)
-        
-        print(self.color_thresholds)
 
         return frame, cropped
     
@@ -380,9 +322,7 @@ class VictimCropper:
         )
     
     def crop(self, frame, wall_mask = None):
-        cropped = None
-        box = None
-        output_size = (20 , 20)
+        cropped , box , width , height= None, None, None, None
 
         invert = self.filters(frame)
 
@@ -403,25 +343,89 @@ class VictimCropper:
                     width, height = int(rect[1][0]), int(rect[1][1])
                     src_pts = box.astype("float32")
 
-                    # dst_pts = np.array([
-                    #     [0, 0],
-                    #     [output_size[0] - 1, 0],
-                    #     [output_size[0] - 1, output_size[1] - 1],
-                    #     [0, output_size[1] - 1]
-                    # ], dtype="float32")
-
                     dst_pts = np.array([[0, height-1],
                                       [0, 0],
                                       [width-1, 0],
                                       [width-1, height-1]], dtype="float32")
+                    
+                    print('1', width , height)
                 
                     M = cv.getPerspectiveTransform(src_pts, dst_pts)
-                    cropped = cv.warpPerspective(invert, M, (width , height))
+                    cropped = cv.warpPerspective(invert, M, (width, height))
 
                     cv.drawContours(frame, [box], 0, (255, 255, 0), 2)
 
-        return frame, cropped, box
+        return frame, cropped, box, width , height
     
+
+    def find_corner_points(self , binary):
+        h , w = binary.shape[:2]
+
+        for y in range(h):
+            for x in range(w):
+                if binary[y, x] == 255:
+                    top_left = (x, y)
+                    break
+            else:
+                continue
+            break
+
+        for y in range(h):
+            for x in range(w-1, -1, -1):
+                if binary[y, x] == 255:
+                    top_right = (x, y)
+                    break
+            else:
+                continue
+            break
+
+        for y in range(h-1, -1, -1):
+            for x in range(w):
+                if binary[y, x] == 255:
+                    bottom_left = (x, y)
+                    break
+            else:
+                continue
+            break
+
+        for y in range(h-1, -1, -1):
+            for x in range(w-1, -1, -1):
+                if binary[y, x] == 255:
+                    bottom_right = (x, y)
+                    break
+            else:
+                continue
+            break
+
+        return top_left, top_right, bottom_left, bottom_right
+
+
+    def WarpVictim(self, frame):
+        _ ,binary, _ , width , height = self.crop(frame)
+        if binary is not None:
+            corners = self.find_corner_points(binary)
+            if any(c is None for c in corners):
+                return None
+
+            tl, tr, bl, br = [np.float32(p) for p in corners]
+
+            # Destination size
+            # width = int(max(np.linalg.norm(tr - tl), np.linalg.norm(br - bl)))
+            # height = int(max(np.linalg.norm(bl - tl), np.linalg.norm(br - tr)))
+            print('2', width , height)
+
+            dst_pts = np.array([[0, 0],
+                                [width - 1, 0],
+                                [0, height - 1],
+                                [width - 1, height - 1]], dtype=np.float32)
+
+            src_pts = np.array([tl, tr, bl, br], dtype=np.float32)
+
+            M = cv.getPerspectiveTransform(src_pts, dst_pts)
+            warped = cv.warpPerspective(binary, M, (width, height))
+
+            return warped
+
 
 class VideoCaptureThread(threading.Thread):
     def __init__(self, src=0, width=640, height=480, fps=120):
@@ -472,10 +476,11 @@ class ProcessingThread(threading.Thread):
 
                 wall_mask = self.wall_detector.detect(frame)
                 color_frame, _ = self.color_detector.detect(frame.copy(), wall_mask)
-                victim_frame, cropped_vic, box = self.victim_cropper.crop(color_frame, wall_mask)
+                victim_frame, cropped_vic, box, _ , _ = self.victim_cropper.crop(color_frame, wall_mask)
+                warped_img = self.victim_cropper.WarpVictim(victim_frame)
 
-                if cropped_vic is not None:
-                    best_match, _, similarity = self.victim_detector.detect(cropped_vic)
+                if warped_img is not None:
+                    best_match, _, similarity = self.victim_detector.detect(warped_img)
                     if best_match and box is not None:
                         cv.drawContours(victim_frame, [box], 0, (255,0,0), 1)
                         cv.putText(victim_frame, f"{similarity:.2f}", 
@@ -488,14 +493,15 @@ class ProcessingThread(threading.Thread):
                                        cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,200,0), 2)
                 
                 curr_time = time.time()
-                self.fps = 1 / ((curr_time - self.last_time) + 10*-6)
+                self.fps = 1 / ((curr_time - self.last_time) + 10**-6)
                 self.last_time = curr_time
                 cv.putText(victim_frame, f"FPS: {int(self.fps)}", (10, 30),
                           cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 
                 cv.imshow('Detection', victim_frame)
-                if cropped_vic is not None:
-                    cv.imshow('color', cropped_vic)
+
+                if warped_img is not None:
+                    cv.imshow('color', warped_img)
                 else:
                     if cv.getWindowProperty('color', cv.WND_PROP_VISIBLE) >= 1:
                         cv.destroyWindow('color')
