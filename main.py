@@ -189,30 +189,9 @@ class VictimDetector:
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
-                [1.,N ,0.,0.,0.,0.,0.,N ,1.]],
-
-                [[N,1.,1.,1.,1.,1.,1.,1.,1.],
-                [N ,N ,N ,N ,1.,N ,N ,N ,N ],
-                [0.,0.,0.,0.,1.,0.,0.,0.,0.],
-                [0.,0.,0.,0.,1.,0.,0.,0.,0.],
-                [0.,0.,0.,0.,1.,0.,0.,0.,0.],
-                [0.,0.,0.,0.,1.,0.,0.,0.,0.],
-                [0.,0.,0.,0.,1.,0.,0.,0.,0.],
-                [N ,N ,N ,N ,1.,N ,N ,N ,N ],
-                [N ,1.,1.,1.,1.,1.,1.,1.,1.]]
-
+                [1.,N ,0.,0.,0.,0.,0.,N ,1.]]
             ],
             'S': [
-                [[0.,N ,1.,1.,1.,1.,1.,N ,N ],
-                [N ,1.,N ,0.,0.,0.,N ,N ,N ],
-                [N ,N ,0.,0.,0.,0.,0.,N ,N ],
-                [N ,1.,N ,N ,0.,0.,0.,0.,0.],
-                [0.,N ,N ,1.,1.,1.,N ,N ,0.],
-                [0.,0.,0.,0.,0.,N ,N ,1.,N ],
-                [N ,N ,0.,0.,0.,0.,0.,N ,N ],
-                [N ,N ,N ,0.,0.,0.,N ,1.,N ],
-                [N ,N ,1.,1.,1.,1.,1.,N ,0.]],
-
                [[N ,N ,N ,0.,0.,N ,N ,N ,0.],
                 [N ,N ,N ,0.,N ,1.,N ,1.,N ],
                 [N ,N ,0.,0.,N ,N ,0.,N ,N ],
@@ -222,7 +201,6 @@ class VictimDetector:
                 [N ,N ,0.,N ,N ,0.,0.,N ,1.],
                 [N ,1.,N ,1.,N ,0.,N ,N ,N ],
                 [0.,N ,N ,N ,0.,0.,N ,N ,N ]]
-
 
             ],
             'U': [
@@ -237,36 +215,15 @@ class VictimDetector:
                 [0.,N ,N ,N ,N ,N ,N ,N ,N ],
                 [0.,N ,N ,1.,1.,1.,1.,1.,1.]],
 
-                [[1.,1.,1.,1.,1.,1.,1.,N ,0.],
-                [N ,N ,N ,N ,N ,N ,N ,N ,N ],
-                [0.,0.,0.,0.,0.,0.,0.,N ,1.],
-                [0.,0.,0.,0.,0.,0.,0.,0.,1.],
-                [0.,0.,0.,0.,0.,0.,0.,0.,1.],
-                [0.,0.,0.,0.,0.,0.,0.,0.,1.],
-                [0.,0.,0.,0.,0.,0.,0.,0.,1.],
-                [N ,N ,N ,N ,N ,N ,N ,N ,N ],
-                [1.,1.,1.,1.,1.,1.,1.,N ,0.]],
-
-                [[0.,0.,1.,1.,1.,1.,1.,N ,0.],
-                [N ,1.,N ,0.,0.,0.,N ,1.,N ],
-                [1.,N ,0.,0.,0.,0.,0.,N ,1.],
-                [1.,N ,0.,0.,0.,0.,0.,N ,1.],
-                [1.,N ,0.,0.,0.,0.,0.,N ,1.],
-                [1.,N ,0.,0.,0.,0.,0.,N ,1.],
-                [1.,N ,0.,0.,0.,0.,0.,N ,1.],
-                [1.,N ,0.,0.,0.,0.,0.,N ,1.],
-                [N ,N ,0.,0.,0.,0.,0.,N ,1.]],
-
-
-                [[1.,N ,0.,0.,0.,0.,0.,N ,1.],
-                [1.,N ,0.,0.,0.,0.,0.,N ,1.],
-                [1.,N ,0.,0.,0.,0.,0.,N ,1.],
-                [1.,N ,0.,0.,0.,0.,0.,N ,1.],
-                [1.,N ,0.,0.,0.,0.,0.,N ,1.],
-                [1.,N ,0.,0.,0.,0.,0.,N ,1.],
+                [[N ,1.,0.,0.,0.,0.,0.,1.,N],
+                [N ,N ,0.,0.,0.,0.,0.,N ,N],
+                [N ,N ,0.,0.,0.,0.,0.,N ,N ],
                 [N ,N ,0.,0.,0.,0.,0.,N ,1.],
-                [N ,N ,N ,0.,0.,0.,N ,N ,N ],
-                [0.,N ,1.,1.,1.,1.,1.,N ,0.]]
+                [1.,N ,0.,0.,0.,0.,0.,N ,1.],
+                [1.,N ,0.,0.,0.,0.,0.,N ,1.],
+                [N ,N ,0.,0.,0.,0.,0.,N ,N ],
+                [N ,1.,N ,N ,N ,N ,N ,1.,0.],
+                [0.,N ,N ,1.,1.,1.,N ,0.,0.]]
 
             ]
         }
@@ -307,16 +264,22 @@ class VictimDetector:
         best_match = None
         highest_similarity = -1
         
+
         for letter, matrices in self.patterns.items():
             for matrix in matrices:
-                similarity = self.cosine_matrix_similarity(np.array(matrix), binary_matrix)
-                if similarity > highest_similarity:
-                    highest_similarity = similarity
-                    best_match = letter
-        
-        if 0.7 <highest_similarity < 0.98:
+                num_rotations = 4 if letter == 'U' else 2
+                
+                for angle in range(num_rotations):
+                    rotated_matrix = np.rot90(matrix, k=angle)
+                    similarity = self.cosine_matrix_similarity(rotated_matrix, binary_matrix)
+                    
+                    if similarity > highest_similarity:
+                        highest_similarity = similarity
+                        best_match = letter
+
+        if 0.7 <highest_similarity < 0.91:
             print(np.array2string(binary_matrix, separator=', '))
-        
+            
         return best_match, binary_matrix, highest_similarity
  
 class VictimCropper:
@@ -396,13 +359,18 @@ class VictimCropper:
     def Warp(self , cropped):
         if cropped is None:
             return None
+        
         contours, _ = cv.findContours(cropped, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
         contour = max(contours, key=cv.contourArea)
+
+        if not contours:
+            return None
         pts = contour.squeeze()
         x, y, w, h = cv.boundingRect(contour)
+
         if len(pts) < 4:
-            pass
+            return None
 
         sum_coords = pts.sum(axis=1)
         diff_coords = np.diff(pts, axis=1).reshape(-1)
@@ -423,8 +391,8 @@ class VictimCropper:
         x_bottom_left , y_bottom_left = bottom_left
         x_bottom_right , y_bottom_right = bottom_right
 
-
-        if abs(x_top_left - x_bottom_left) < 10 and abs(x_top_right - x_bottom_right) < 10 and abs(y_bottom_left - y_bottom_right) < 10 and abs(y_top_left - y_top_right) < 10:
+        # print(x_top_left - x_bottom_left, x_top_right - x_bottom_right, y_bottom_left - y_bottom_right, y_top_left - y_top_right)
+        if abs(x_top_left - x_bottom_left) < 5 and abs(x_top_right - x_bottom_right) < 5 and abs(y_bottom_left - y_bottom_right) < 5 and abs(y_top_left - y_top_right) < 5:
             final_warped = cropped
 
         else:
@@ -446,6 +414,10 @@ class VictimCropper:
             warped = cv.warpPerspective(cropped, M, (self.SIZE, self.SIZE))
 
             warped_contours , _ = cv.findContours(warped, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+            
+            if warped_contours is None:
+                return cropped
+            
             contour = max(warped_contours, key=cv.contourArea)
             x, y, w, h = cv.boundingRect(contour)
 
