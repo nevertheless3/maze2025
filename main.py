@@ -11,40 +11,16 @@ COLOR_THRESHOLDS_FILE = r'C:\Users\Win11\Desktop\maze\maze-2026\maze2025\thresho
 
 DEFAULT_COLOR_THRESHOLDS = {
     "green": {
-        "lower": [
-            0,
-            17,
-            128
-        ],
-        "upper": [
-            206,
-            118,
-            168
-        ]
+        "lower": [0, 17, 128],
+        "upper": [206, 118, 168]
     },
     "yellow": {
-        "lower": [
-            0,
-            118,
-            173
-        ],
-        "upper": [
-            255,
-            144,
-            255
-        ]
+        "lower": [0, 118, 173],
+        "upper": [255, 144, 255]
     },
     "red": {
-        "lower": [
-            0,
-            153,
-            139
-        ],
-        "upper": [
-            255,
-            255,
-            199
-        ]
+        "lower": [0, 153, 139],
+        "upper": [255, 255, 199]
     }
 }
 
@@ -116,7 +92,7 @@ class ColorDetector:
         w, h = int(rect[1][0]), int(rect[1][1])
         aspect_ratio = w/h if h >0 else 0
 
-        print('hhhheeeey' , area, AREA / 66)
+        # print('hhhheeeey' , area, AREA / 66)
         return (
                 0.3 < aspect_ratio < 3 and
                 3 < len(approx) < 7 and 
@@ -194,7 +170,7 @@ class ColorDetector:
                     center = (int(rect[0][0]), int(rect[0][1]))
                     cv.circle(frame, center, 5, color["display_color"], -1)
         
-        print(self.color_thresholds)
+        # print(self.color_thresholds)
 
         return frame, cropped
     
@@ -239,7 +215,7 @@ class VictimDetector:
 
                [[N ,N ,N ,0.,0.,N ,N ,N ,0.],
                 [N ,N ,N ,0.,N ,1.,N ,1.,N ],
-                [N ,N ,0.,0.,N ,N ,0.,N ,1.],
+                [N ,N ,0.,0.,N ,N ,0.,N ,N ],
                 [1.,0.,0.,0.,N ,N ,0.,0.,1.],
                 [1.,0.,0.,0.,1.,0.,0.,0.,1.],
                 [1.,0.,0.,N ,1.,0.,0.,0.,1.],
@@ -338,15 +314,14 @@ class VictimDetector:
                     highest_similarity = similarity
                     best_match = letter
         
-        if 0.94 <highest_similarity < 0.98:
+        if 0.7 <highest_similarity < 0.98:
             print(np.array2string(binary_matrix, separator=', '))
-        # highest_similarity *= 10**4
         
         return best_match, binary_matrix, highest_similarity
  
 class VictimCropper:
     def __init__(self):
-        pass
+        self.SIZE = 90
 
     def filters(self , frame):
         gray = cv.cvtColor(frame , cv.COLOR_BGR2GRAY)
@@ -379,10 +354,11 @@ class VictimCropper:
             h + y <= height 
         )
     
+
+    
     def crop(self, frame, wall_mask = None):
         cropped = None
         box = None
-        output_size = (20 , 20)
 
         invert = self.filters(frame)
 
@@ -403,24 +379,81 @@ class VictimCropper:
                     width, height = int(rect[1][0]), int(rect[1][1])
                     src_pts = box.astype("float32")
 
-                    # dst_pts = np.array([
-                    #     [0, 0],
-                    #     [output_size[0] - 1, 0],
-                    #     [output_size[0] - 1, output_size[1] - 1],
-                    #     [0, output_size[1] - 1]
-                    # ], dtype="float32")
+                    dst_pts = np.array([
+                        [0, 0],
+                        [self.SIZE - 1, 0],
+                        [self.SIZE - 1, self.SIZE - 1],
+                        [0, self.SIZE - 1]
+                    ], dtype="float32")
 
-                    dst_pts = np.array([[0, height-1],
-                                      [0, 0],
-                                      [width-1, 0],
-                                      [width-1, height-1]], dtype="float32")
-                
                     M = cv.getPerspectiveTransform(src_pts, dst_pts)
-                    cropped = cv.warpPerspective(invert, M, (width , height))
+                    cropped = cv.warpPerspective(invert, M, (self.SIZE,self.SIZE))
 
                     cv.drawContours(frame, [box], 0, (255, 255, 0), 2)
 
         return frame, cropped, box
+
+    def Warp(self , cropped):
+        if cropped is None:
+            return None
+        contours, _ = cv.findContours(cropped, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+
+        contour = max(contours, key=cv.contourArea)
+        pts = contour.squeeze()
+        x, y, w, h = cv.boundingRect(contour)
+        if len(pts) < 4:
+            pass
+
+        sum_coords = pts.sum(axis=1)
+        diff_coords = np.diff(pts, axis=1).reshape(-1)
+
+        top_left = pts[np.argmin(sum_coords)]
+        bottom_right = pts[np.argmax(sum_coords)]
+        top_right = pts[np.argmin(diff_coords)]
+
+        bottom_left = pts[np.argmax(diff_coords)]
+
+        src_corners = np.array([top_left, top_right, bottom_right, bottom_left], dtype="float32")
+
+        width = max(np.linalg.norm(top_right - top_left), np.linalg.norm(bottom_right - bottom_left))
+        height = max(np.linalg.norm(bottom_left - top_left), np.linalg.norm(bottom_right - top_right))
+
+        x_top_left , y_top_left = top_left
+        x_top_right , y_top_right = top_right
+        x_bottom_left , y_bottom_left = bottom_left
+        x_bottom_right , y_bottom_right = bottom_right
+
+
+        if abs(x_top_left - x_bottom_left) < 10 and abs(x_top_right - x_bottom_right) < 10 and abs(y_bottom_left - y_bottom_right) < 10 and abs(y_top_left - y_top_right) < 10:
+            final_warped = cropped
+
+        else:
+            scale = min(self.SIZE / width, self.SIZE / height) * 0.5
+
+            dst_width, dst_height = width * scale, height * scale
+
+            offset_x = (self.SIZE - dst_width) // 2 
+            offset_y = (self.SIZE - dst_height) // 2 
+            # print('offest' , offset_x , offset_y)
+            dst_pts = np.array([
+                [offset_x, offset_y],                        # Top-left
+                [offset_x + dst_width, offset_y],           # Top-right
+                [offset_x + dst_width, offset_y + dst_height],  # Bottom-right
+                [offset_x, offset_y + dst_height]           # Bottom-left
+            ], dtype="float32")
+
+            M = cv.getPerspectiveTransform(src_corners, dst_pts)
+            warped = cv.warpPerspective(cropped, M, (self.SIZE, self.SIZE))
+
+            warped_contours , _ = cv.findContours(warped, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+            contour = max(warped_contours, key=cv.contourArea)
+            x, y, w, h = cv.boundingRect(contour)
+
+            final_warped = warped[y:y+h, x:x+w]
+            final_warped = cv.resize(final_warped, (28, 28))
+
+        return final_warped     
+                
     
 
 class VideoCaptureThread(threading.Thread):
@@ -473,9 +506,10 @@ class ProcessingThread(threading.Thread):
                 wall_mask = self.wall_detector.detect(frame)
                 color_frame, _ = self.color_detector.detect(frame.copy(), wall_mask)
                 victim_frame, cropped_vic, box = self.victim_cropper.crop(color_frame, wall_mask)
+                warped_vic = self.victim_cropper.Warp(cropped_vic)
 
-                if cropped_vic is not None:
-                    best_match, _, similarity = self.victim_detector.detect(cropped_vic)
+                if warped_vic is not None:
+                    best_match, _, similarity = self.victim_detector.detect(warped_vic)
                     if best_match and box is not None:
                         cv.drawContours(victim_frame, [box], 0, (255,0,0), 1)
                         cv.putText(victim_frame, f"{similarity:.2f}", 
@@ -495,10 +529,16 @@ class ProcessingThread(threading.Thread):
                 
                 cv.imshow('Detection', victim_frame)
                 if cropped_vic is not None:
-                    cv.imshow('color', cropped_vic)
+                    cv.imshow('cropped', cropped_vic)
                 else:
-                    if cv.getWindowProperty('color', cv.WND_PROP_VISIBLE) >= 1:
-                        cv.destroyWindow('color')
+                    if cv.getWindowProperty('cropped', cv.WND_PROP_VISIBLE) >= 1:
+                        cv.destroyWindow('cropped')
+
+                if warped_vic is not None:
+                    cv.imshow('warped', warped_vic)
+                else:
+                    if cv.getWindowProperty('warped', cv.WND_PROP_VISIBLE) >= 1:
+                        cv.destroyWindow('warped')
 
                 if cv.waitKey(1) & 0xFF == ord('q'):
                     self.running = False
