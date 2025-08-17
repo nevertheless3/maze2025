@@ -277,7 +277,7 @@ class VictimDetector:
                         highest_similarity = similarity
                         best_match = letter
 
-        if 0.7 <highest_similarity < 0.91:
+        if 0.7 <highest_similarity < 0.98:
             print(np.array2string(binary_matrix, separator=', '))
             
         return best_match, binary_matrix, highest_similarity
@@ -325,8 +325,12 @@ class VictimCropper:
 
         invert = self.filters(frame)
 
+        
+
         if wall_mask is not None:
             invert = cv.bitwise_and(invert, invert, mask=wall_mask)
+
+            
 
         contours, _ = cv.findContours(invert.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
         
@@ -362,15 +366,17 @@ class VictimCropper:
         
         contours, _ = cv.findContours(cropped, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
+
         contour = max(contours, key=cv.contourArea)
 
         if not contours:
-            return None
+            return cropped
+        
         pts = contour.squeeze()
         x, y, w, h = cv.boundingRect(contour)
 
         if len(pts) < 4:
-            return None
+            return cropped
 
         sum_coords = pts.sum(axis=1)
         diff_coords = np.diff(pts, axis=1).reshape(-1)
@@ -414,17 +420,21 @@ class VictimCropper:
             warped = cv.warpPerspective(cropped, M, (self.SIZE, self.SIZE))
 
             warped_contours , _ = cv.findContours(warped, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+
+            contour = max(warped_contours, key=cv.contourArea, default = 0)
             
-            if warped_contours is None:
+            if not warped_contours:
                 return cropped
+                
             
-            contour = max(warped_contours, key=cv.contourArea)
             x, y, w, h = cv.boundingRect(contour)
 
             final_warped = warped[y:y+h, x:x+w]
             final_warped = cv.resize(final_warped, (28, 28))
 
-        return final_warped     
+        return final_warped
+            
+             
                 
     
 
@@ -460,7 +470,9 @@ class ProcessingThread(threading.Thread):
         self.capture_thread = capture_thread
         self.running = False
         self.fps = 0
-        self.last_time = 0
+        self.frame_count = 0
+        self.last_fps_time = time.time()
+        self.last_frame_time = time.time()
         
         self.wall_detector = WhiteWallDetector()
         self.color_detector = ColorDetector()
@@ -469,11 +481,14 @@ class ProcessingThread(threading.Thread):
 
     def run(self):
         self.running = True
-        self.last_time = time.time()
         
         while self.running:
             if not self.capture_thread.frame_queue.empty():
                 frame = self.capture_thread.frame_queue.get()
+                current_time = time.time()
+
+                frame_time = current_time - self.last_frame_time
+                self.last_frame_time = current_time
 
                 wall_mask = self.wall_detector.detect(frame)
                 color_frame, _ = self.color_detector.detect(frame.copy(), wall_mask)
@@ -493,9 +508,12 @@ class ProcessingThread(threading.Thread):
                                        (box[0][0], box[0][1]-10), 
                                        cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,200,0), 2)
                 
-                curr_time = time.time()
-                self.fps = 1 / ((curr_time - self.last_time) + 10*-6)
-                self.last_time = curr_time
+                self.frame_count += 1
+                if current_time - self.last_fps_time >= 1:
+                    self.fps = self.frame_count / (current_time - self.last_fps_time)
+                    self.frame_count = 0
+                    self.last_fps_time = current_time
+
                 cv.putText(victim_frame, f"FPS: {int(self.fps)}", (10, 30),
                           cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 
@@ -512,6 +530,8 @@ class ProcessingThread(threading.Thread):
                     if cv.getWindowProperty('warped', cv.WND_PROP_VISIBLE) >= 1:
                         cv.destroyWindow('warped')
 
+                cv.waitKey(120)
+
                 if cv.waitKey(1) & 0xFF == ord('q'):
                     self.running = False
 
@@ -519,12 +539,12 @@ class ProcessingThread(threading.Thread):
         self.running = False
 
 if __name__ == "__main__":
-    CAMERA_WIDTH = 640  
-    CAMERA_HEIGHT = 480
+    CAMERA_WIDTH = 320
+    CAMERA_HEIGHT = 240
     TARGET_FPS = 120    
 
     cap_thread = VideoCaptureThread(
-        src=0, 
+        src=r'C:\Users\Win11\Desktop\maze\maze-2026\maze2025\super.mp4', 
         width=CAMERA_WIDTH,
         height=CAMERA_HEIGHT,
         fps=TARGET_FPS
