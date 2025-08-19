@@ -6,6 +6,10 @@ import time
 import json 
 import os
 from sklearn.metrics.pairwise import cosine_similarity
+from send_vicitm import SendVictim
+
+
+victim_sender = SendVictim() 
 
 COLOR_THRESHOLDS_FILE = r'C:\Users\Win11\Desktop\maze\maze-2026\maze2025\thresholds.json'
 
@@ -62,19 +66,19 @@ class ColorDetector:
         self.detected_colors = []
         self.color_ranges = [
             {
-                "name": "Green",
+                "name": "G",
                 "lower": np.array(self.color_thresholds['green']['lower']),
                 "upper": np.array(self.color_thresholds['green']['upper']),
                 "display_color": (0, 255, 0)  
             },
             {
-                "name": "Red",
+                "name": "R",
                 "lower": np.array(self.color_thresholds['red']['lower']),
                 "upper": np.array(self.color_thresholds['red']['upper']),
                 "display_color": (0, 0, 255) 
             },
             {
-                "name": "Yellow",
+                "name": "Y",
                 "lower": np.array(self.color_thresholds['yellow']['lower']),
                 "upper": np.array(self.color_thresholds['yellow']['upper']),
                 "display_color": (0, 255, 255)  
@@ -165,6 +169,7 @@ class ColorDetector:
                 if self.check_parts(cropped, color["name"]):
                     color_found = True
                     self.detected_colors.append(color["name"])
+                    victim_sender.FoundVictim(color["name"])
 
                     cv.drawContours(frame, [box], 0, color["display_color"], 2)
                     center = (int(rect[0][0]), int(rect[0][1]))
@@ -504,6 +509,7 @@ class ProcessingThread(threading.Thread):
                                    cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
                         
                         if similarity >= 0.95:
+                            victim_sender.FoundVictim(best_match)
                             cv.putText(victim_frame, best_match, 
                                        (box[0][0], box[0][1]-10), 
                                        cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,200,0), 2)
@@ -530,7 +536,6 @@ class ProcessingThread(threading.Thread):
                     if cv.getWindowProperty('warped', cv.WND_PROP_VISIBLE) >= 1:
                         cv.destroyWindow('warped')
 
-                cv.waitKey(120)
 
                 if cv.waitKey(1) & 0xFF == ord('q'):
                     self.running = False
@@ -539,12 +544,12 @@ class ProcessingThread(threading.Thread):
         self.running = False
 
 if __name__ == "__main__":
-    CAMERA_WIDTH = 320
-    CAMERA_HEIGHT = 240
-    TARGET_FPS = 120    
+    CAMERA_WIDTH = 160
+    CAMERA_HEIGHT = 120
+    TARGET_FPS = 30
 
     cap_thread = VideoCaptureThread(
-        src=r'C:\Users\Win11\Desktop\maze\maze-2026\maze2025\super.mp4', 
+        src=0, 
         width=CAMERA_WIDTH,
         height=CAMERA_HEIGHT,
         fps=TARGET_FPS
