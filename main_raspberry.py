@@ -5,10 +5,10 @@ import queue
 import time
 import json 
 import os
-from send_vicitm import SendVictim
+# from send_vicitm import SendVictim
 
 
-victim_sender = SendVictim() 
+# victim_sender = SendVictim() 
 
 COLOR_THRESHOLDS_FILE = r'C:\Users\Win11\Desktop\maze\maze-2026\maze2025\thresholds.json'
 
@@ -168,7 +168,7 @@ class ColorDetector:
                 if self.check_parts(cropped, color["name"]):
                     color_found = True
                     self.detected_colors.append(color["name"])
-                    victim_sender.FoundVictim(color["name"])
+                    # victim_sender.FoundVictim(color["name"])
 
                     cv.drawContours(frame, [box], 0, color["display_color"], 2)
                     center = (int(rect[0][0]), int(rect[0][1]))
@@ -469,7 +469,7 @@ class VictimCropper:
 class VideoCaptureThread(threading.Thread):
     def __init__(self, src=0, width=160, height=120, fps=120):
         threading.Thread.__init__(self)
-        self.picam = Picamera2(1)
+        self.picam = Picamera2(0)
         self.picam_config = self.picam.create_preview_configuration(
             main={"size": (width, height), "format": "RGB888"}
         )
@@ -495,7 +495,7 @@ class VideoCaptureThread(threading.Thread):
         self.picam.stop()
 
 
-        
+
 class ProcessingThread(threading.Thread):
     def __init__(self, capture_thread):
         threading.Thread.__init__(self)
@@ -536,7 +536,7 @@ class ProcessingThread(threading.Thread):
                                    cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
                         
                         if similarity >= 0.95:
-                            victim_sender.FoundVictim(best_match)
+                            # victim_sender.FoundVictim(best_match)
                             cv.putText(victim_frame, best_match, 
                                        (box[0][0], box[0][1]-10), 
                                        cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,200,0), 2)
