@@ -9,6 +9,15 @@ class SendVictim:
         self.victims_detections = {}
         self.sent_victims = set()
         self.reset_time = time.time()
+        self.victims_pins = {
+        'H': (0, 0, 1, 0),
+        'S': (0, 1, 0, 0),
+        'U': (0, 1, 1, 0),
+        'R': (0, 0, 1, 0),
+        'Y': (0, 1, 0, 0),
+        'G': (0, 1, 1, 0)
+    }
+
 
     def send(self, victim_type):
         # ser.write(f"{victim_type}\n".encode('utf-8'))

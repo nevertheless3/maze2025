@@ -5,7 +5,6 @@ import queue
 import time
 import json 
 import os
-from sklearn.metrics.pairwise import cosine_similarity
 from send_vicitm import SendVictim
 
 
@@ -194,7 +193,17 @@ class VictimDetector:
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
                 [1.,N ,0.,0.,0.,0.,0.,N ,1.],
-                [1.,N ,0.,0.,0.,0.,0.,N ,1.]]
+                [1.,N ,0.,0.,0.,0.,0.,N ,1.]],
+
+                [[N , N , N , N , N , N , N , N , 2],
+                [1., 1., 1., 1., 1., 1., 1., 1., 2],
+                [0., 0., 0., 0., N , 0., 0., 0., 0],
+                [0., 0., 0., 0., 1., 0., 0., 0., 0],
+                [0., 0., 0., 0., 1., 0., 0., 0., 0],
+                [0., 0., 0., 0., 1., 0., 0., 0., 0],
+                [0., 0., 0., 0., 1., 0., 0., 0., 0],
+                [N , 1., 1., 1., 1., 1., 1., 1., 1],
+                [0., N , N , 1., 1., 1., N , N , 2]]
             ],
             'S': [
                [[N ,N ,N ,0.,0.,N ,N ,N ,0.],
@@ -205,7 +214,17 @@ class VictimDetector:
                 [1.,0.,0.,N ,1.,0.,0.,0.,1.],
                 [N ,N ,0.,N ,N ,0.,0.,N ,1.],
                 [N ,1.,N ,1.,N ,0.,N ,N ,N ],
-                [0.,N ,N ,N ,0.,0.,N ,N ,N ]]
+                [0.,N ,N ,N ,0.,0.,N ,N ,N ]],
+
+                [[0., 0., N , 0., 0., N , 1., N , 0.],
+                [0., 1., N , 0., N , 1., 1., 1., 0.],
+                [N , N , N , 0., N , N , 0., N , N ],
+                [1., N , 0., 0., N , N , 0., N , 1.],
+                [1., N , 0., N , N , N , 0., N , 1.],
+                [N , N , 0., N , N , N , 0., N , 1.],
+                [N , N , 0., N , N , 0., 0., N , 1.],
+                [0., 1., 1., N , N , 0., N , 1., 0.],
+                [0., N , 1., N , N , 0., N , N , 0.]]
 
             ],
             'U': [
@@ -233,9 +252,14 @@ class VictimDetector:
             ]
         }
     
+
     @staticmethod
-    def cosine_matrix_similarity(template, input_matrix):
-        template = np.array(template, np.float16)
+    def cosine_similarity(vec1, vec2):
+        return np.dot(vec1, vec2.T) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+
+    
+    def cosine_matrix_similarity(self , template, input_matrix):
+        template = np.array(template, np.float32)
 
         valid_mask = ~np.isnan(template)
         t_vals = template[valid_mask]
@@ -247,7 +271,7 @@ class VictimDetector:
         flat1 = t_vals.flatten().reshape(1, -1)
         flat2 = i_vals.flatten().reshape(1, -1)
         
-        return cosine_similarity(flat1,flat2)[0][0]
+        return self.cosine_similarity(flat1,flat2)[0][0]
 
     
     def detect(self, frame):
@@ -264,7 +288,7 @@ class VictimDetector:
         resized = cv.resize(frame, (matrix_size, matrix_size), fx=scale, fy=scale)
         
         _, binary_matrix = cv.threshold(resized, 121, 1, cv.THRESH_BINARY)
-        binary_matrix = binary_matrix.astype(np.float16)
+        binary_matrix = binary_matrix.astype(np.float32)
         
         best_match = None
         highest_similarity = -1
@@ -272,7 +296,7 @@ class VictimDetector:
 
         for letter, matrices in self.patterns.items():
             for matrix in matrices:
-                num_rotations = 4 if letter == 'U' else 2
+                num_rotations = 2 if letter == 'H' else 4
                 
                 for angle in range(num_rotations):
                     rotated_matrix = np.rot90(matrix, k=angle)
