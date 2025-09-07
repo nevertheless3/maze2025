@@ -5,15 +5,15 @@ import queue
 import time
 import json 
 import os
-from send_vicitm import SendVictim
 import subprocess
 import re
-
+from picamera2 import Picamera2 
+from send_vicitm import SendVictim
 
 
 victim_sender = SendVictim() 
 
-COLOR_THRESHOLDS_FILE = r'C:\Users\Win11\Desktop\maze\maze-2026\maze2025\thresholds.json'
+COLOR_THRESHOLDS_FILE = 'thresholds.json'
 
 DEFAULT_COLOR_THRESHOLDS = {
     "green": {
@@ -30,6 +30,26 @@ DEFAULT_COLOR_THRESHOLDS = {
     }
 }
 
+def get_camera_map():
+    result = subprocess.run(
+        ["rpicam-hello", "--list-cameras"],
+        capture_output=True, text=True
+    )
+    
+    cam_map = {}
+    for line in result.stdout.splitlines():
+        match = re.match(r"(\d+)\s*:\s*(\S+).*(i2c@\d+)", line)
+        if match:
+            index, sensor, bus = match.groups()
+            print(bus)
+
+            if bus == "i2c@88000":
+                cam_map["R"] = int(index)
+            elif bus == "i2c@84000":
+                cam_map["L"] = int(index)
+    return cam_map
+
+
 def load_color_thresholds():
     if os.path.exists(COLOR_THRESHOLDS_FILE):
         with open(COLOR_THRESHOLDS_FILE, 'r') as f:
@@ -39,23 +59,6 @@ def load_color_thresholds():
                 return DEFAULT_COLOR_THRESHOLDS
     return DEFAULT_COLOR_THRESHOLDS
 
-
-def get_camera_map():
-    result = subprocess.run(
-        ["libcamera-hello", "--list-cameras"],
-        capture_output=True, text=True
-    )
-    
-    cam_map = {}
-    for line in result.stdout.splitlines():
-        match = re.match(r"(\d+)\s*:\s*(\S+).*(i2c@\d+)", line)
-        if match:
-            index, sensor, bus = match.groups()
-            if bus == "i2c@0":
-                cam_map["CAMERA0"] = int(index)
-            elif bus == "i2c@1":
-                cam_map["CAMERA1"] = int(index)
-    return cam_map
 
 
 class WhiteWallDetector:
@@ -189,7 +192,7 @@ class ColorDetector:
                 if self.check_parts(cropped, color["name"]):
                     color_found = True
                     self.detected_colors.append(color["name"])
-                    # victim_sender.FoundVictim(color["name"])
+                    victim_sender.FoundVictim('right' , color["name"])
 
                     cv.drawContours(frame, [box], 0, color["display_color"], 2)
                     center = (int(rect[0][0]), int(rect[0][1]))
@@ -490,7 +493,8 @@ class VictimCropper:
 class VideoCaptureThread(threading.Thread):
     def __init__(self, src=0, width=160, height=120, fps=120):
         threading.Thread.__init__(self)
-        self.picam = Picamera2(0)
+        cam_id = get_camera_map()["R"]
+        self.picam = Picamera2(cam_id)
         self.picam_config = self.picam.create_preview_configuration(
             main={"size": (width, height), "format": "RGB888"}
         )
@@ -557,7 +561,7 @@ class ProcessingThread(threading.Thread):
                                    cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
                         
                         if similarity >= 0.95:
-                            # victim_sender.FoundVictim(best_match)
+                            victim_sender.FoundVictim('right' , best_match)
                             cv.putText(victim_frame, best_match, 
                                        (box[0][0], box[0][1]-10), 
                                        cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,200,0), 2)
