@@ -6,6 +6,8 @@ import time
 import json 
 import os
 from send_vicitm import SendVictim
+import math
+from sklearn.metrics.pairwise import cosine_similarity
 
 
 victim_sender = SendVictim() 
@@ -253,9 +255,10 @@ class VictimDetector:
         }
     
 
-    @staticmethod
-    def cosine_similarity(vec1, vec2):
-        return np.dot(vec1, vec2.T) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+    # @staticmethod
+    # def cosine_similarity(vec1, vec2):
+    #                               |>broadcasting
+    #     return np.dot(vec1, vec2.T) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
 
     
     def cosine_matrix_similarity(self , template, input_matrix):
@@ -271,7 +274,7 @@ class VictimDetector:
         flat1 = t_vals.flatten().reshape(1, -1)
         flat2 = i_vals.flatten().reshape(1, -1)
         
-        return self.cosine_similarity(flat1,flat2)[0][0]
+        return cosine_similarity(flat1,flat2)[0][0]
 
     
     def detect(self, frame):
@@ -313,81 +316,174 @@ class VictimDetector:
  
 class VictimCropper:
     def __init__(self):
-        self.SIZE = 90
+        self.rng = np.random.RandomState(112244)
+        self.SZ = 90
 
-    def filters(self , frame):
-        gray = cv.cvtColor(frame , cv.COLOR_BGR2GRAY)
-        blur = cv.GaussianBlur(gray , (31 ,31), 1)
-        adaptive_mean = cv.adaptiveThreshold(blur, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 53, 20)
-        invert = (255 - adaptive_mean)
+    def filters_crop(self , frame):
+        gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+        # gray = cv.GaussianBlur(gray , (31 ,31), 1)
+        kernel = np.ones((3, 3), np.uint8)
+        gray = cv.morphologyEx(gray, cv.MORPH_OPEN, kernel)
+        gray = cv.erode(gray, np.ones((3, 3), np.uint8))
 
-        return invert
+        dst = cv.adaptiveThreshold(gray, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY_INV,53, 25)
+
+        cv.imshow('filter', dst)
+        return dst,gray
+
+
+    def filters_detect(self , frame):
+        gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+        gray = cv.GaussianBlur(gray , (31 ,31), 1)
+
+        dst = cv.adaptiveThreshold(gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV,53, 20)
+
+        cv.imshow('jhjhjhjh', dst)
+        return dst,gray
+
+    def moments_check(self , cnt_moments):  
+
+        hu_moments = np.zeros(7)
+        Hu = [0,0,0,0,0,0,0]
+        hu_moments = cv.HuMoments(cnt_moments).flatten()  # Assuming cnt_moments is the moments dict
+
+        for m in range(7):
+            Hu[m] = -1 * math.copysign(1.0, hu_moments[m]) * math.log10(abs(hu_moments[m])) * 100
+
+        # S_check = (Hu[1] > 100 and Hu[1] < 225 and
+        #         Hu[0] > 20 and Hu[0] < 70 and
+        #         Hu[1] < Hu[3] and
+        #         Hu[2] > 275 and Hu[2] < 700 and
+        #         Hu[3] > 320 and Hu[3] < 600 and
+        #         abs(Hu[5]) > 400 and
+        #         abs(Hu[6]) > 600 and abs(Hu[6]) < 1200 and
+        #         abs(Hu[6] / Hu[4]) > 0.75 and abs(Hu[6] / Hu[4]) < 1.3 and
+        #         abs(Hu[5] / Hu[3]) >= 1.1 and abs(Hu[5] / Hu[3]) < 2.5 and
+        #         abs(Hu[1] / Hu[0]) > 3.5 and abs(Hu[1] / Hu[0]) < 6)
+
+        # hu_check = Hu[1] > 100
+
+        nu_check = (cnt_moments['nu02'] > 0.11 and cnt_moments['nu02'] < 0.32 and
+                    cnt_moments['nu20'] > 0.065 and cnt_moments['nu20'] < 0.32 and
+                    abs(cnt_moments['nu11']) <= 0.09)
+
+        # H_check = (Hu[1] > 100 and Hu[1] < 350 and
+        #         Hu[0] < 60 and
+        #         Hu[1] < Hu[3] and
+        #         abs(Hu[5]) > 300 and
+        #         abs(Hu[6]) > 480 and abs(Hu[6]) < 1200 and
+        #         abs(Hu[6] / Hu[4]) > 0.75 and abs(Hu[6] / Hu[4]) < 1.3 and
+        #         abs(Hu[1] / Hu[0]) > 3.6 and abs(Hu[1] / Hu[0]) < 8)
+
+        # U_check = (Hu[1] > 100 and
+        #         Hu[0] < 50 and
+        #         abs(Hu[5]) > 300 and
+        #         abs(Hu[6]) > 300 and abs(Hu[6]) < 1200 and
+        #         abs(Hu[6] / Hu[4]) > 0.75 and abs(Hu[6] / Hu[4]) < 1.5 and
+        #         abs(Hu[1] / Hu[0]) > 7 and abs(Hu[1] / Hu[0]) < 15)
+
+        return nu_check # and (S_check or H_check or U_check)
     
-    def check_contours(self, cnt, frame):
-        max_area = 9000
-        min_area = 100
-        height, width = frame.shape[:2]
-        rect = cv.minAreaRect(cnt)
-        box = cv.boxPoints(rect)
-        box = np.int32(box)
-        
-        w, h = int(rect[1][0]), int(rect[1][1])
-        area = cv.contourArea(cnt)
-        x, y, _, _ = cv.boundingRect(cnt)
-        aspect_ratio = w/h if h > 0 else 0
-
-        return (
-            min_area <= area <= max_area and
-            width//16 <= w <= width//2.2 and
-            0.55 <= aspect_ratio <= 1.8 and
-            x >= 2 and
-            x + w <= width - 2 and
-            y >= 8 and
-            h + y <= height 
-        )
-    
+    # def deskew(self , img):
+    #     # gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+    #     img = 255 - img
+    #     m = cv.moments(img)
+    #     if abs(m['mu02']) < 1e-2:
+    #         return img.copy()
+    #     skew = m['mu11'] / m['mu02']
+    #     M = np.float32([[1, skew, -0.7 * self.SZ * skew], [0, 1, 0]])
+    #     out = cv.warpAffine(img, M, (self.SZ, self.SZ), flags=cv.WARP_INVERSE_MAP | cv.INTER_LINEAR)
+    #     mask = cv.inRange(out, 0, 0)
+    #     out[mask == 255] = 255
+    #     return out
 
     
-    def crop(self, frame, wall_mask = None):
-        cropped = None
+
+    def crop(self , img, wall_mask = None):
+        warped_fungus = None
         box = None
 
-        invert = self.filters(frame)
+        dst, gray = self.filters_crop(img)
+        contours, _ = cv.findContours(dst, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
 
-        
+        for i in range(len(contours)):
+            cnt = contours[i]
+            box = cv.boundingRect(cnt)
+                            
+            rect = cv.minAreaRect(cnt)
+            area = cv.contourArea(cnt)
 
-        if wall_mask is not None:
-            invert = cv.bitwise_and(invert, invert, mask=wall_mask)
+            hull = cv.convexHull(cnt)
+            hull_area = cv.contourArea(hull)
+            solidity = area / hull_area if hull_area != 0 else 0
 
-            
+            p = cv.boxPoints(rect)
+            p = np.int32(p)
 
-        contours, _ = cv.findContours(invert.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-        
-        if contours:
-            contours = sorted(contours , key= cv.contourArea , reverse= True)[:3]
-            
-            for contour in contours:
-                if self.check_contours(contour, frame):
-                    rect = cv.minAreaRect(contour)
-                    box = cv.boxPoints(rect)
-                    box = np.int32(box)
-                    
-                    width, height = int(rect[1][0]), int(rect[1][1])
-                    src_pts = box.astype("float32")
+            rwidth = np.sqrt((p[1][0] - p[0][0])**2 + (p[1][1] - p[0][1])**2)
+            rheight = np.sqrt((p[2][0] - p[1][0])**2 + (p[2][1] - p[1][1])**2)
+            ar = rwidth / (rheight + 1e-9)
+            rect_area = rwidth * rheight
+            r = hull_area / (rect_area + 1e-9)
 
-                    dst_pts = np.array([
-                        [0, 0],
-                        [self.SIZE - 1, 0],
-                        [self.SIZE - 1, self.SIZE - 1],
-                        [0, self.SIZE - 1]
-                    ], dtype="float32")
+            if (box[0] > 1 and solidity <= 0.95 and solidity >= 0.32 and ar >= 0.3 and ar <= 3 and r >= 0.80 and area >= 200):
+                color = (self.rng.randint(0, 256), self.rng.randint(0, 256), self.rng.randint(0, 256))
+                colormat = np.full((150, 150, 3), color, dtype=np.uint8)
 
-                    M = cv.getPerspectiveTransform(src_pts, dst_pts)
-                    cropped = cv.warpPerspective(invert, M, (self.SIZE,self.SIZE))
+                mask = np.zeros(gray.shape, dtype=np.uint8)
+                cv.drawContours(mask, [cnt], -1, 255, -1)
+                img_masked = np.full_like(img,(255,255,255))
+                img_masked[mask == 255] = img[mask == 255]
 
-                    cv.drawContours(frame, [box], 0, (255, 255, 0), 2)
+                pts1 = p.astype(np.float32)
+                pts2 = np.array([[0, 0], 
+                                 [self.SZ- 1, 0], 
+                                 [self.SZ- 1, self.SZ- 1], 
+                                 [0, self.SZ- 1]], dtype=np.float32)
+                
+                prs = cv.getPerspectiveTransform(pts1, pts2)
+                detect_img, _ = self.filters_detect(img)
+                warped_fungus = cv.warpPerspective(detect_img, prs, (self.SZ, self.SZ))
 
-        return frame, cropped, box
+                cv.imshow("jgfjgfjgjgj", warped_fungus  )
+
+
+                cnt_Moments = cv.moments(cnt)
+
+                cv.putText(img, str(cnt_Moments['nu02']), (p[0][0], p[0][1]), 1, 1, (255,0,0), 1, 1) 
+                cv.putText(img, str(cnt_Moments['nu20']), (p[0][0], p[0][1]+ 20),1, 1, (0,255,0), 1, 1) 
+                cv.putText(img, str(cnt_Moments['nu11']), (p[0][0], p[0][1]+ 30), 1, 1, (0,0,255), 1, 1) 
+
+                # warped_fungus = self.deskew(warped_fungus)
+                # filtered_warped_fungus = self.filters(warped_fungus)[0]
+                # filtered_warped_fungus =cv.erode(filtered_warped_fungus, np.ones((5, 5), np.uint8))
+
+                is_vic = self.moments_check(cnt_Moments)
+
+                # warped_fungus = cv.resize(warped_fungus, (12, 12), interpolation=cv.INTER_NEAREST)
+
+                cool = np.zeros_like(img)
+
+                if is_vic:
+                    tl = (box[0], box[1])
+                    br = (box[0] + box[2], box[1] + box[3])
+                    cv.rectangle(img, tl, br, color, 2)
+                    cv.rectangle(cool, tl, br, color, -1)
+                    cv.addWeighted(img, 1.0, cool, 0.3, 0.9, img)
+
+                    return img , warped_fungus , p
+
+                else:
+                    colorr = (255, 255, 255)
+                    tl = (box[0], box[1])
+                    br = (box[0] + box[2], box[1] + box[3])
+                    cv.rectangle(img, tl, br, colorr, 2)
+                    cv.rectangle(cool, tl, br, colorr, -1)
+                    cv.addWeighted(img, 1.0, cool, 0.3, -0.9, img)
+
+        return img , None , None
+
+
 
     def Warp(self , cropped):
         if cropped is None:
@@ -395,7 +491,9 @@ class VictimCropper:
         
         contours, _ = cv.findContours(cropped, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
-
+        if len(contours) < 1:
+            return None
+        
         contour = max(contours, key=cv.contourArea)
 
         if not contours:
@@ -431,12 +529,12 @@ class VictimCropper:
             final_warped = cropped
 
         else:
-            scale = min(self.SIZE / width, self.SIZE / height) * 0.5
+            scale = min(self.SZ / width, self.SZ / height) * 0.5
 
             dst_width, dst_height = width * scale, height * scale
 
-            offset_x = (self.SIZE - dst_width) // 2 
-            offset_y = (self.SIZE - dst_height) // 2 
+            offset_x = (self.SZ - dst_width) // 2 
+            offset_y = (self.SZ - dst_height) // 2 
             # print('offest' , offset_x , offset_y)
             dst_pts = np.array([
                 [offset_x, offset_y],                        # Top-left
@@ -446,7 +544,7 @@ class VictimCropper:
             ], dtype="float32")
 
             M = cv.getPerspectiveTransform(src_corners, dst_pts)
-            warped = cv.warpPerspective(cropped, M, (self.SIZE, self.SIZE))
+            warped = cv.warpPerspective(cropped, M, (self.SZ, self.SZ))
 
             warped_contours , _ = cv.findContours(warped, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
@@ -459,14 +557,18 @@ class VictimCropper:
             x, y, w, h = cv.boundingRect(contour)
 
             final_warped = warped[y:y+h, x:x+w]
-            final_warped = cv.resize(final_warped, (28, 28))
+            final_warped = cv.resize(final_warped, (90, 90))
+
+            moments = cv.moments(final_warped)
+
+            is_vic = self.moments_check(moments)
+        
+            # if is_vic:
+            #     return final_warped
+            # final_warped = self.deskew(final_warped)
 
         return final_warped
             
-             
-                
-    
-
 class VideoCaptureThread(threading.Thread):
     def __init__(self, src=0, width=640, height=480, fps=120):
         threading.Thread.__init__(self)
@@ -523,16 +625,17 @@ class ProcessingThread(threading.Thread):
                 color_frame, _ = self.color_detector.detect(frame.copy(), wall_mask)
                 victim_frame, cropped_vic, box = self.victim_cropper.crop(color_frame, wall_mask)
                 warped_vic = self.victim_cropper.Warp(cropped_vic)
+                # filters = self.victim_cropper.filters(frame)
 
                 if warped_vic is not None:
                     best_match, _, similarity = self.victim_detector.detect(warped_vic)
                     if best_match and box is not None:
-                        cv.drawContours(victim_frame, [box], 0, (255,0,0), 1)
+                        # cv.drawContours(victim_frame, [box], 0, (255,0,0), 1)
                         cv.putText(victim_frame, f"{similarity:.2f}", 
                                    (box[0][0], box[0][1]-35), 
                                    cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
                         
-                        if similarity >= 0.95:
+                        if similarity >= 0.8:
                             victim_sender.FoundVictim(best_match)
                             cv.putText(victim_frame, best_match, 
                                        (box[0][0], box[0][1]-10), 
@@ -547,6 +650,7 @@ class ProcessingThread(threading.Thread):
                 cv.putText(victim_frame, f"FPS: {int(self.fps)}", (10, 30),
                           cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 
+                # cv.imshow('filter', filters)
                 cv.imshow('Detection', victim_frame)
                 if cropped_vic is not None:
                     cv.imshow('cropped', cropped_vic)

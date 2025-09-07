@@ -5,10 +5,13 @@ import queue
 import time
 import json 
 import os
-# from send_vicitm import SendVictim
+from send_vicitm import SendVictim
+import subprocess
+import re
 
 
-# victim_sender = SendVictim() 
+
+victim_sender = SendVictim() 
 
 COLOR_THRESHOLDS_FILE = r'C:\Users\Win11\Desktop\maze\maze-2026\maze2025\thresholds.json'
 
@@ -35,6 +38,24 @@ def load_color_thresholds():
             except json.JSONDecodeError:
                 return DEFAULT_COLOR_THRESHOLDS
     return DEFAULT_COLOR_THRESHOLDS
+
+
+def get_camera_map():
+    result = subprocess.run(
+        ["libcamera-hello", "--list-cameras"],
+        capture_output=True, text=True
+    )
+    
+    cam_map = {}
+    for line in result.stdout.splitlines():
+        match = re.match(r"(\d+)\s*:\s*(\S+).*(i2c@\d+)", line)
+        if match:
+            index, sensor, bus = match.groups()
+            if bus == "i2c@0":
+                cam_map["CAMERA0"] = int(index)
+            elif bus == "i2c@1":
+                cam_map["CAMERA1"] = int(index)
+    return cam_map
 
 
 class WhiteWallDetector:

@@ -1,5 +1,5 @@
 import numpy as np 
-# import serial
+import serial
 import time
 
 # ser = serial.Serial('/dev/ttyS0', baudrate=115200, timeout=1)
@@ -9,17 +9,18 @@ class SendVictim:
         self.victims_detections = {}
         self.sent_victims = set()
         self.reset_time = time.time()
-        self.victims_pins = {
-        'H': (0, 0, 1, 0),
-        'S': (0, 1, 0, 0),
-        'U': (0, 1, 1, 0),
-        'R': (0, 0, 1, 0),
-        'Y': (0, 1, 0, 0),
-        'G': (0, 1, 1, 0)
-    }
+        self.ser = serial.Serial(port='/dev/ttyS0', baudrate=115200, timeout=0.01)
 
+    def reset_input_buffer(self):
+        self.ser.reset_input_buffer()
 
-    def send(self, victim_type):
+    def write(self, data):
+        self.ser.write(str(data).encode())
+
+    def read(self):
+        return self.ser.readline().decode('utf-8', errors='ignore').strip()
+
+    def send(self, victim_type, victim_side):
         # ser.write(f"{victim_type}\n".encode('utf-8'))
         print(f"Sent: {victim_type}")
 
@@ -42,7 +43,7 @@ class SendVictim:
 
         if letter in self.victims_detections and sum(self.victims_detections.values()) >= victim_checking_count:
             best_letter = list(self.victims_detections.keys())[np.argmax(np.array(list(self.victims_detections.values())))]
-            self.send(best_letter)
+            self.send(best_letter, )
             print("----------------------Detected victim", best_letter, "after detecting for", self.victims_detections[letter], "time(s)")
 
             self.victims_detections[best_letter] = 0
