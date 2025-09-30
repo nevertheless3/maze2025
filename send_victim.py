@@ -9,21 +9,24 @@ class SendVictim:
         self.victims_detections = {}
         self.sent_victims = set()
         self.reset_time = time.time()
-        self.ser = serial.Serial(port='/dev/ttyS0', baudrate=115200, timeout=0.01)
+        # self.ser = serial.Serial(port='/dev/ttyS0', baudrate=115200, timeout=0.01)
 
     def reset_input_buffer(self):
-        self.ser.reset_input_buffer()
+        # self.ser.reset_input_buffer()
+        return
 
     def write(self, data):
-        self.ser.write(str(data).encode())
+        # self.ser.write(str(data).encode())
+        return
 
     def read(self):
-        return self.ser.readline().decode('utf-8', errors='ignore').strip()
+        return ""
+        # return self.ser.readline().decode('utf-8', errors='ignore').strip()
 
     def send(self, victim_side, victim_type):
         # ser.write(f"{victim_type}\n".encode('utf-8'))
-        self.write(f"{victim_side}{victim_type}")
-        print(f"Sent: {victim_type}")
+        # self.write(f"{victim_side}{victim_type}")
+        print(f"Sent: {victim_side}:{victim_type}")
 
     def reset(self ,force_reset: bool = False, just_pins: bool = False):
         if force_reset or time.time() - self.reset_time > 500:
