@@ -5,7 +5,7 @@ import queue
 import time
 import json 
 import os
-from send_vicitm import SendVictim
+from send_victim import SendVictim
 import math
 from sklearn.metrics.pairwise import cosine_similarity
 
