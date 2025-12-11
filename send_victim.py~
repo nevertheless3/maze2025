@@ -13,8 +13,7 @@ class SendVictim:
         self.victims_detections = {}
         self.sent_victims = set()
         self.reset_time = time.time()
-        self.ser = None
-        #self.ser = SerialHandler('/dev/serial0', 115200)
+        self.ser = SerialHandler('/dev/serial0', 115200)
         self.ser.config(time.time())
         self.ser.run_serial()
         self.chip = None
@@ -38,15 +37,12 @@ class SendVictim:
         self.pin3.set_value(0)
         
     def reset_input_buffer(self):
-        return
         self.ser.reset_input_buffer()
 
     def write(self, data):
-        return
         self.ser.write(str(data).encode())
 
     def read(self):
-        return
         return self.ser.readline().decode('utf-8', errors='ignore').strip()
 
     def send(self, victim_type, victim_side):

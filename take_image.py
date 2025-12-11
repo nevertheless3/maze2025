@@ -1,0 +1,35 @@
+import cv2 as cv
+from picamera2 import Picamera2
+
+
+picam = Picamera2(1)
+picam_config = picam.create_preview_configuration(
+    main={"size": (640,480), "format": "RGB888"},
+    buffer_count=8,
+)
+picam_config["controls"]["FrameRate"] = 60 
+picam.configure(picam_config)
+picam.set_controls({
+    "ExposureTime": 20000,  
+    "NoiseReductionMode": 1,  
+})
+
+picam.start()
+
+
+n = 14
+
+while True:
+    frame = picam.capture_array()
+    
+
+    cv.imshow('frame',frame)
+    
+    key = cv.waitKey(1)
+
+    if key == ord('s'):
+        cv.imwrite(f'captured_frame_{n}.jpg', frame)
+        n+=1
+
+    if key == 27:
+        break

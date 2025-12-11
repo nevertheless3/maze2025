@@ -1,9 +1,24 @@
 import cv2 as cv
-import numpy as np 
+import numpy as np
 import os
 import json
+from picamera2 import Picamera2
 
-CONFIG_FILE = r'C:\Users\Win11\Desktop\maze\maze-2026\maze2025\thresholds.json'
+picam = Picamera2(0)
+picam_config = picam.create_preview_configuration(
+            main={"size": (160 , 120), "format": "RGB888"},
+            buffer_count=8,
+        )
+picam_config["controls"]["FrameRate"] = 50
+picam.configure(picam_config)
+picam.set_controls({
+            "ExposureTime": 20000,
+            "NoiseReductionMode": 1,
+        })
+
+picam.start()
+
+CONFIG_FILE = 'thresholds.json'
 
 DEFAULT_VALS = {
     "green": {
@@ -45,8 +60,8 @@ def SaveVals(lower, upper, color):
         'lower': [int(x) for x in lower],
         'upper': [int(x) for x in upper]
     }
-    
-    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+
+    #os.makedirs(CONFIG_FILE, exist_ok=True)
     with open(CONFIG_FILE, 'w') as f:
         json.dump(all_colors, f, indent=4)
     print(f"Saved {color} thresholds: lower={lower}, upper={upper}")
@@ -77,75 +92,69 @@ cv.createTrackbar('L upper', window_name, current_upper[0], 255, lambda x: None)
 cv.createTrackbar('A upper', window_name, current_upper[1], 255, lambda x: None)
 cv.createTrackbar('B upper', window_name, current_upper[2], 255, lambda x: None)
 
-cap = cv.VideoCapture(0)
 
-try:
-    while True:  
-        ret, frame = cap.read()  
-        if not ret:  
-            break 
 
-        lower = [
+while True:
+    frame = picam.capture_array()
+
+    lower = [
             cv.getTrackbarPos('L lower', window_name),
             cv.getTrackbarPos('A lower', window_name),
             cv.getTrackbarPos('B lower', window_name)
         ]
-        upper = [
+    upper = [
             cv.getTrackbarPos('L upper', window_name),
             cv.getTrackbarPos('A upper', window_name),
             cv.getTrackbarPos('B upper', window_name)
         ]
 
-        lab = cv.cvtColor(frame, cv.COLOR_BGR2LAB)
-        lower_array = np.array(lower)
-        upper_array = np.array(upper)
-        mask = cv.inRange(lab, lower_array, upper_array)
-        result = cv.bitwise_and(frame, frame, mask=mask)
+    lab = cv.cvtColor(frame, cv.COLOR_BGR2LAB)
+    lower_array = np.array(lower)
+    upper_array = np.array(upper)
+    mask = cv.inRange(lab, lower_array, upper_array)
+    result = cv.bitwise_and(frame, frame, mask=mask)
 
-        cv.imshow('Original', frame)
-        cv.imshow('LAB', lab)
-        cv.imshow('Mask', mask)
-        cv.imshow('Result', result)
-        
-        key = cv.waitKey(1) & 0xFF
-        if key == ord('q'):
-            color = ask_color()
-            SaveVals(lower, upper, color)
-            break
-        elif key == ord('s'):
-            color = ask_color()
-            SaveVals(lower, upper, color)
-        elif key == ord('1'):
-            current_color = 'green'
-            current_lower = all_colors[current_color]['lower']
-            current_upper = all_colors[current_color]['upper']
-            cv.setTrackbarPos('L lower', window_name, current_lower[0])
-            cv.setTrackbarPos('A lower', window_name, current_lower[1])
-            cv.setTrackbarPos('B lower', window_name, current_lower[2])
-            cv.setTrackbarPos('L upper', window_name, current_upper[0])
-            cv.setTrackbarPos('A upper', window_name, current_upper[1])
-            cv.setTrackbarPos('B upper', window_name, current_upper[2])
-        elif key == ord('2'):
-            current_color = 'yellow'
-            current_lower = all_colors[current_color]['lower']
-            current_upper = all_colors[current_color]['upper']
-            cv.setTrackbarPos('L lower', window_name, current_lower[0])
-            cv.setTrackbarPos('A lower', window_name, current_lower[1])
-            cv.setTrackbarPos('B lower', window_name, current_lower[2])
-            cv.setTrackbarPos('L upper', window_name, current_upper[0])
-            cv.setTrackbarPos('A upper', window_name, current_upper[1])
-            cv.setTrackbarPos('B upper', window_name, current_upper[2])
-        elif key == ord('3'):
-            current_color = 'red'
-            current_lower = all_colors[current_color]['lower']
-            current_upper = all_colors[current_color]['upper']
-            cv.setTrackbarPos('L lower', window_name, current_lower[0])
-            cv.setTrackbarPos('A lower', window_name, current_lower[1])
-            cv.setTrackbarPos('B lower', window_name, current_lower[2])
-            cv.setTrackbarPos('L upper', window_name, current_upper[0])
-            cv.setTrackbarPos('A upper', window_name, current_upper[1])
-            cv.setTrackbarPos('B upper', window_name, current_upper[2])
+    cv.imshow('Original', frame)
+    cv.imshow('LAB', lab)
+    cv.imshow('Mask', mask)
+    cv.imshow('Result', result)
 
-finally:
-    cap.release()
-    cv.destroyAllWindows()
+    key = cv.waitKey(1) & 0xFF
+    if key == ord('q'):
+        color = ask_color()
+        SaveVals(lower, upper, color)
+        break
+    elif key == ord('s'):
+        color = ask_color()
+        SaveVals(lower, upper, color)
+    elif key == ord('1'):
+        current_color = 'green'
+        current_lower = all_colors[current_color]['lower']
+        current_upper = all_colors[current_color]['upper']
+        cv.setTrackbarPos('L lower', window_name, current_lower[0])
+        cv.setTrackbarPos('A lower', window_name, current_lower[1])
+        cv.setTrackbarPos('B lower', window_name, current_lower[2])
+        cv.setTrackbarPos('L upper', window_name, current_upper[0])
+        cv.setTrackbarPos('A upper', window_name, current_upper[1])
+        cv.setTrackbarPos('B upper', window_name, current_upper[2])
+    elif key == ord('2'):
+        current_color = 'yellow'
+        current_lower = all_colors[current_color]['lower']
+        current_upper = all_colors[current_color]['upper']
+        cv.setTrackbarPos('L lower', window_name, current_lower[0])
+        cv.setTrackbarPos('A lower', window_name, current_lower[1])
+        cv.setTrackbarPos('B lower', window_name, current_lower[2])
+        cv.setTrackbarPos('L upper', window_name, current_upper[0])
+        cv.setTrackbarPos('A upper', window_name, current_upper[1])
+        cv.setTrackbarPos('B upper', window_name, current_upper[2])
+    elif key == ord('3'):
+        current_color = 'red'
+        current_lower = all_colors[current_color]['lower']
+        current_upper = all_colors[current_color]['upper']
+        cv.setTrackbarPos('L lower', window_name, current_lower[0])
+        cv.setTrackbarPos('A lower', window_name, current_lower[1])
+        cv.seTrackbarPos('B lower', window_name, current_lower[2])
+        cv.setTrackbarPos('L upper', window_name, current_upper[0])
+        cv.setTrackbarPos('A upper', window_name, current_upper[1])
+        cv.setTrackbarPos('B upper', window_name, current_upper[2])
+
